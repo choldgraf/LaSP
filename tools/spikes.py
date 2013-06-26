@@ -191,13 +191,21 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001):
         ax = plt.gca()
 
     if duration is None:
-        duration = np.max([max(trial) for trial in spike_trials])
+        duration = -np.inf
+        for trial in spike_trials:
+            if len(trial) > 0:
+                duration = max(duration, np.max(trial))
 
     nbins = (duration / bin_size)
 
     for k,trial in enumerate(spike_trials):
-        for st in trial[(trial >= 0.0) & (trial <= duration)]:
 
+        if len(trial) == 0:
+            continue
+        indx = (trial >= 0.0) & (trial <= duration)
+        if indx.sum() == 0:
+            continue
+        for st in trial[indx]:
             y = k
             x = int(st / bin_size)
             rect = Rectangle( (x, y), width=1, height=1)
