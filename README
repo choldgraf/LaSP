@@ -9,6 +9,7 @@ PyTables
 h5py
 nitime
 
-
+Optional:
+Sox: http://sox.sourceforge.net
 
 
