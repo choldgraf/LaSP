@@ -1,6 +1,9 @@
 from scipy.stats import gamma
+from matplotlib.patches import Rectangle
 
 import numpy as np
+
+import matplotlib.pyplot as plt
 
 
 def compute_joint_isi(spike_train1, spike_train2, window_size=0.500, bin_size=0.001):
@@ -120,22 +123,46 @@ def simulate_gamma(psth, trials, duration, num_trials=20):
     return new_trials
 
 
-def compute_psth(trials, duration):
+def compute_psth(trials, duration, bin_size=0.001):
+    """
+        Compute a peri-stimulus time histogram (PSTH), conditioned on an event such as stimulus.
 
-    #compute the PSTH
-    bin_rate = 1000
-    nbins = int(duration*bin_rate)
-    scnts = np.zeros(nbins, dtype='int32')
+        trials: an array of arrays of spike times in seconds, relative to the onset of the stimulus,
+                If a spike precedes a stimulus, it's spike time should be negative. len(trials) = # of trials,
+                and len(trials[0]) = number of spikes in first trial
+        duration: the duration of the event.
+        bin_size: the size in seconds of the bin to use in creating the PSTH (defaults to 0.001s = 1ms)
+
+        Returns the average spike rate in KHz across trials in each time bin.
+    """
+
+    nbins = int(np.ceil(duration / bin_size))
+    spike_counts = np.zeros(nbins)
     for stimes in trials:
-        stimes = np.array(stimes, dtype='float32')
+        if len(stimes) == 0:
+            continue
+        stimes = np.array(stimes)
         if len(stimes.shape) > 0:
-            stimes *= 1000
-            stimes = stimes.astype('int32')
-            sindx = stimes[(stimes >=0) & (stimes < nbins)]
-            scnts[sindx] += 1
-    nscnts = scnts.astype('float32') / len(trials)
+            #get index of spike times valid for the conditioned event
+            vi = (stimes >= 0.0) & (stimes <= duration)
 
-    return nscnts
+            #convert spike times to indices in PSTH
+            sbins = np.floor(stimes[vi] / bin_size).astype('int')
+
+            #add spike to each bin
+            for k in sbins:
+                spike_counts[k] += 1
+
+    #compute rate in KHz by dividing by bin size
+    spike_counts /= bin_size*1000.0
+
+    #take mean across trials (spikes were already summed across trials)
+    spike_counts /= len(trials)
+
+    #construct time axis, represents time point at left hand of bin
+    t = np.arange(nbins).astype('float') * bin_size
+
+    return t,spike_counts
 
 
 def create_random_psth(duration, smooth_win_size=10, samp_rate=1000.0, thresh=0.5):
@@ -152,3 +179,43 @@ def create_random_psth(duration, smooth_win_size=10, samp_rate=1000.0, thresh=0.
     return psth
 
 
+def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001):
+    """
+        Make a raster plot of the trials of spike times.
+
+        spike_trials: an array of arrays of spike times in seconds, with a spike time of
+        zero indicating the onset of the stimulus.
+    """
+
+    if ax is None:
+        ax = plt.gca()
+
+    if duration is None:
+        duration = np.max([max(trial) for trial in spike_trials])
+
+    nbins = (duration / bin_size)
+
+    for k,trial in enumerate(spike_trials):
+        for st in trial[(trial >= 0.0) & (trial <= duration)]:
+
+            y = k
+            x = int(st / bin_size)
+            rect = Rectangle( (x, y), width=1, height=1)
+            ax.add_patch(rect)
+
+    ax.autoscale_view()
+
+    ax.set_xlim(0.0, nbins)
+    ax.figure.canvas.draw()
+    xt_oldlabels = [x.get_text() for x in ax.get_xticklabels()]
+    xt_newlabels = []
+    for xtl in xt_oldlabels:
+        try:
+            xt_nl = '%0.1f' % (float(xtl) / 1000.0)
+        except:
+            xt_nl = ''
+        xt_newlabels.append(xt_nl)
+    ax.set_xticklabels(xt_newlabels)
+    ax.set_ylabel('Trial')
+    ax.set_xlabel('Time (s)')
+    plt.axis('tight')

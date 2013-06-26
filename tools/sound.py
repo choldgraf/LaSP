@@ -90,7 +90,7 @@ class WavFile():
         s = (spw_size+5)
         e = s + spec_size
         ax = fig.add_subplot(gs[s:e])
-        self.plot_spectrogram()
+        plot_spectrogram(self.spectrogram_t, self.spectrogram_f, ax=ax, ticks=True)
 
         if show_rms:
             ax = fig.add_subplot(gs[(e+5):95])
@@ -99,18 +99,18 @@ class WavFile():
             plt.ylabel('RMS')
             plt.axis('tight')
 
-    def plot_spectrogram(self, ax=None, ticks=True):
-        if ax is None:
-            ax = plt.gca()
-        nxticks = 8
-        nyticks = 4
-        ex = (0.0, self.spectrogram_t.max(), self.spectrogram_f.min(), self.spectrogram_f.max())
-        iax = ax.imshow(self.spectrogram, aspect='auto', interpolation='nearest', origin='lower', extent=ex)
-        if not ticks:
-            ax.set_xticks([])
-            ax.set_yticks([])
-        else:
-            ax.set_ylabel('Frequency (Hz)')
+
+def plot_spectrogram(t, freq, spec, ax=None, ticks=True):
+    if ax is None:
+        ax = plt.gca()
+
+    ex = (0.0, t.max(), freq.min(), freq.max())
+    iax = ax.imshow(spec, aspect='auto', interpolation='nearest', origin='lower', extent=ex)
+    if not ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
+    else:
+        ax.set_ylabel('Frequency (Hz)')
 
 
 def play_sound(file_name):
@@ -119,6 +119,11 @@ def play_sound(file_name):
 
 
 def log_spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, noise_level_db=80, nstd=6):
+    """
+        Given a sound pressure waveform, compute the log spectrogram. See documentation on gaussian_stft for arguments and return values.
+
+        noise_level_db: the threshold noise level in decibels, anything below this is set to zero
+    """
 
     increment = 1.0 / spec_sample_rate
     window_length = nstd / (2.0*np.pi*freq_spacing)
@@ -133,6 +138,24 @@ def log_spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, 
 
 
 def gaussian_stft(s, sample_rate, window_length, increment, nstd=6, min_freq=0, max_freq=None):
+    """
+        Given a sound pressure waveform, compute the log spectrogram.
+
+        s: the raw waveform.
+        sample_rate: the sample rate of the waveform
+        spec_sample_rate: the sample rate of the spectrogram, i.e. the spacing between points that the FFT is taken
+        freq_spacing: the spacing in Hz between frequency bands
+        min_freq: the minimum frequency to analyze
+        max_freq: the maximum frequency to analyze
+        nstd: number of standard deviations for Gaussian window centered at each point
+
+        Returns t,freq,spec,rms:
+
+        t: the time axis of the spectrogram
+        freq: the frequency axis of the spectrogram
+        spec: the log spectrogram
+        rms: the running root-mean-square of the sound pressure waveform
+    """
 
     if max_freq is None:
         max_freq = sample_rate / 2.0

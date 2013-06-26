@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def strf_correlation(strf1, strf2, max_delay=10):
     """
         Computes the dot product between two STRFs across in a way that's invariant to frequency differences and time lags up to max_delay.
@@ -33,6 +34,7 @@ def strf_correlation(strf1, strf2, max_delay=10):
     mi = np.unravel_index(all_ccs_abs.argmax(), all_ccs.shape)
     argmax_delay,argmax_freq = time_shifts[mi[0]], freq_shifts[mi[1]]
     return argmax_delay, argmax_freq, all_ccs[mi[0], mi[1]]
+
 
 def strf_mps(strf, fstep, sample_rate, half=False):
 
