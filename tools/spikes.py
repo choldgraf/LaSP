@@ -227,3 +227,49 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001):
     ax.set_ylabel('Trial')
     ax.set_xlabel('Time (s)')
     plt.axis('tight')
+
+
+def xcorr_hist(spike_train1, spike_train2, duration=None, window_size=0.001, sample_rate=1000.0, normalize=True):
+    """
+        Make a cross-correlation histogram of coincident spike times between spike train 1 and 2. The cross-correlation
+        histogram is a function of time. At each moment t im time, the value of the histogram is given as the number
+        of spike pairs from train 1 and 2 that are within the window specified by window_size.
+
+        Normalization means to divide by window_size*int(duration*sample_rate), which turns the returned quantity into
+        the probability of spikes from the two trains co-occurring.
+
+        Returns t,xhist,clow,chigh where t is the time vector, xhist is the cross-correlation histogram, and clow and chigh
+        are the lower and upper 95% confidence intervals. When a normalized xhist falls between these
+    """
+
+    if duration is None:
+        duration = -np.inf
+        for st in spike_train1:
+            if len(st) > 0:
+                duration = np.max(np.max(st), duration)
+
+    #construct the histogram
+    nbins = int(np.ceil(duration*sample_rate))
+    xhist = np.zeros([nbins], dtype='int')
+
+    half_window_size = window_size / 2
+    #populate the histogram
+    for t in range(nbins):
+        tmin = t/sample_rate - half_window_size
+        tmax = t/sample_rate + half_window_size
+        #count the number of spikes that occur in this time window
+        ns1 = ((spike_train1 >= tmin) & (spike_train1 <= tmax)).sum()
+        ns2 = ((spike_train2 >= tmin) & (spike_train2 <= tmax)).sum()
+        #compute the count of all pairs, this is the value for the histogram
+        xhist[t] = ns1*ns2
+
+    R = int(duration*sample_rate)
+    if normalize:
+        xhist = xhist.astype('float') / (window_size * R)
+
+    #compute confidence intervals
+    clow = -1.96 / np.sqrt(4*window_size*R)
+    chigh = 1.96 / np.sqrt(4*window_size*R)
+
+    t = np.arange(nbins)*(1.0 / sample_rate)
+    return t,xhist,clow,chigh
