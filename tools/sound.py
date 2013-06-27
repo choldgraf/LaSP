@@ -1,3 +1,4 @@
+import copy
 import subprocess
 import wave
 import struct
@@ -7,6 +8,7 @@ from scipy.io.wavfile import read as read_wavfile
 from scipy.fftpack import fft,fftfreq
 
 import matplotlib.pyplot as plt
+from tools.signal import lowpass_filter
 
 
 class WavFile():
@@ -201,3 +203,25 @@ def gaussian_stft(s, sample_rate, window_length, increment, nstd=6, min_freq=0, 
     t = np.arange(0, nwindows, 1.0) * increment
 
     return t,freq,timefreq,rms
+
+
+def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
+    """
+        Get the spectral envelope from the sound pressure waveform.
+
+        s: the signal
+        sample_rate: the sample rate of the signal
+        cutoff_freq: the cutoff frequency of the low pass filter used to create the envelope
+
+        Returns the spectral envelope of the signal, with same sample rate.
+    """
+
+    srect = copy.copy(s)
+    #rectify
+    srect[srect < 0.0] = 0.0
+    #low pass filter
+    sfilt = lowpass_filter(srect, sample_rate, cutoff_freq)
+    #re-rectify
+    sfilt[sfilt < 0.0] = 0.0
+    return sfilt
+
