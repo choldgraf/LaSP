@@ -8,7 +8,7 @@ from scipy.io.wavfile import read as read_wavfile
 from scipy.fftpack import fft,fftfreq
 
 import matplotlib.pyplot as plt
-from tools.signal import lowpass_filter
+from tools.signal import lowpass_filter,gaussian_stft
 
 
 class WavFile():
@@ -138,71 +138,6 @@ def log_spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, 
 
     return t,freq,spec,rms
 
-
-def gaussian_stft(s, sample_rate, window_length, increment, nstd=6, min_freq=0, max_freq=None):
-    """
-        Given a sound pressure waveform, compute the log spectrogram.
-
-        s: the raw waveform.
-        sample_rate: the sample rate of the waveform
-        spec_sample_rate: the sample rate of the spectrogram, i.e. the spacing between points that the FFT is taken
-        freq_spacing: the spacing in Hz between frequency bands
-        min_freq: the minimum frequency to analyze
-        max_freq: the maximum frequency to analyze
-        nstd: number of standard deviations for Gaussian window centered at each point
-
-        Returns t,freq,spec,rms:
-
-        t: the time axis of the spectrogram
-        freq: the frequency axis of the spectrogram
-        spec: the log spectrogram
-        rms: the running root-mean-square of the sound pressure waveform
-    """
-
-    if max_freq is None:
-        max_freq = sample_rate / 2.0
-
-    #compute lengths in # of samples
-    nwinlen = int(sample_rate*window_length)
-    if nwinlen % 2 == 0:
-        nwinlen += 1
-    hnwinlen = nwinlen / 2
-
-    nincrement = int(sample_rate*increment)
-    nwindows = len(s) / nincrement
-    #print 'len(s)=%d, nwinlen=%d, hwinlen=%d, nincrement=%d, nwindows=%d' % (len(s), nwinlen, hnwinlen, nincrement, nwindows)
-
-    #construct the window
-    gauss_t = np.arange(-hnwinlen, hnwinlen, 1.0)
-    gauss_std = nwinlen / float(nstd)
-    gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
-
-    #pad the signal with zeros
-    zs = np.zeros([len(s) + 2*hnwinlen])
-    zs[hnwinlen:-hnwinlen] = s
-
-    #get the frequencies corresponding to the FFTs to come
-    fft_len = nwinlen+1
-    full_freq = fftfreq(nwinlen+1, d=1.0 / sample_rate)
-    freq_index = (full_freq >= min_freq) & (full_freq <= max_freq)
-    freq = full_freq[freq_index]
-    nfreq = freq_index.sum()
-
-    #take the FFT of each segment, padding with zeros when necessary to keep window length the same
-    timefreq = np.zeros([nfreq, nwindows], dtype='complex')
-    rms = np.zeros([nwindows])
-    for k in range(nwindows):
-        center = k*nincrement + hnwinlen
-        si = center - hnwinlen
-        ei = center + hnwinlen
-        rms[k] = zs[si:ei].std(ddof=1)
-        windowed_slice = zs[si:ei]*gauss_window
-        zs_fft = fft(windowed_slice, n=fft_len, overwrite_x=1)
-        timefreq[:, k] = zs_fft[freq_index]
-
-    t = np.arange(0, nwindows, 1.0) * increment
-
-    return t,freq,timefreq,rms
 
 
 def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
