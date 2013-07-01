@@ -4,7 +4,7 @@ from scipy import fftpack
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
 
-from netman.analysis.psth import compute_psth
+from tools.spikes import compute_psth
 
 
 class CoherenceData(object):
