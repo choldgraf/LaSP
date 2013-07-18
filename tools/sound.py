@@ -92,7 +92,7 @@ class WavFile():
         s = (spw_size+5)
         e = s + spec_size
         ax = fig.add_subplot(gs[s:e])
-        plot_spectrogram(self.spectrogram_t, self.spectrogram_f, ax=ax, ticks=True)
+        plot_spectrogram(self.spectrogram_t, self.spectrogram_f, self.spectrogram, ax=ax, ticks=True)
 
         if show_rms:
             ax = fig.add_subplot(gs[(e+5):95])
