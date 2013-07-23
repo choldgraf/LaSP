@@ -76,14 +76,13 @@ class GaussianWindowSpectrumEstimator(PowerSpectrumEstimator):
         hnwinlen = nwinlen / 2
 
         #construct the window
-        gauss_t = np.arange(-hnwinlen, hnwinlen, 1.0)
+        gauss_t = np.arange(-hnwinlen, hnwinlen+1, 1.0)
         gauss_std = float(nwinlen) / float(self.nstd)
         self.gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
 
-
         #window the signal and take the FFT
         windowed_slice = signal*self.gauss_window
-        fft_len = len(signal)+1
+        fft_len = len(signal)
         s_fft = fft(windowed_slice, n=fft_len, overwrite_x=1)
         freq = fftfreq(fft_len, d=1.0 / sample_rate)
 
@@ -144,7 +143,7 @@ def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=
     zs[hnwinlen:-hnwinlen] = s
 
     #get the frequencies corresponding to the FFTs to come
-    full_freq = fftfreq(nwinlen+1, d=1.0 / sample_rate)
+    full_freq = fftfreq(nwinlen, d=1.0 / sample_rate)
     freq_index = (full_freq >= min_freq) & (full_freq <= max_freq)
     freq = full_freq[freq_index]
     nfreq = freq_index.sum()
@@ -155,7 +154,7 @@ def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=
     for k in range(nwindows):
         center = k*nincrement + hnwinlen
         si = center - hnwinlen
-        ei = center + hnwinlen
+        ei = center + hnwinlen + 1
         rms[k] = zs[si:ei].std(ddof=1)
         ps_freq,ps = spectrum_estimator.estimate(zs[si:ei], sample_rate)
         findex = (ps_freq <= max_freq) & (ps_freq >= min_freq)
