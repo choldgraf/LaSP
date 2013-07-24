@@ -14,8 +14,9 @@ from tools.signal import lowpass_filter,gaussian_stft
 class WavFile():
     """ Class for representing a sound and writing it to a .wav file """
 
-    def __init__(self, file_name=None):
+    def __init__(self, file_name=None, log_spectrogram=True):
 
+        self.log_spectrogram = log_spectrogram
         if file_name is None:
             self.sample_depth = 2  # in bytes
             self.sample_rate = 44100.0  # in Hz
@@ -63,8 +64,8 @@ class WavFile():
             print 'Could not identify fundamental frequency!'
             self.fundamental_freq = 0.0
 
-        #compute spectrogram
-        t,f,spec,spec_rms = log_spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate, freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq)
+        #compute log spectrogram
+        t,f,spec,spec_rms = spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate, freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq, log=self.log_spectrogram)
         self.spectrogram_t = t
         self.spectrogram_f = f
         self.spectrogram = spec
@@ -102,11 +103,17 @@ class WavFile():
             plt.axis('tight')
 
 
-def plot_spectrogram(t, freq, spec, ax=None, ticks=True):
+def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None):
     if ax is None:
         ax = plt.gca()
 
-    ex = (0.0, t.max(), freq.min(), freq.max())
+    if fmin is None:
+        fmin = freq.min()
+    if fmax is None:
+        fmax = freq.max()
+    pfreq = freq[(freq >= fmin) & (freq <= fmax)]
+
+    ex = (t.min(), t.max(), pfreq.min(), pfreq.max())
     iax = ax.imshow(spec, aspect='auto', interpolation='nearest', origin='lower', extent=ex)
     if not ticks:
         ax.set_xticks([])
@@ -120,24 +127,27 @@ def play_sound(file_name):
     subprocess.call(['play', file_name])
 
 
-def log_spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, noise_level_db=80, nstd=6):
+def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80):
     """
         Given a sound pressure waveform, compute the log spectrogram. See documentation on gaussian_stft for arguments and return values.
 
-        noise_level_db: the threshold noise level in decibels, anything below this is set to zero
+        log: whether or not to take the log of th power and convert to decibels, defaults to True
+        noise_level_db: the threshold noise level in decibels, anything below this is set to zero. unused of log=False
     """
 
     increment = 1.0 / spec_sample_rate
     window_length = nstd / (2.0*np.pi*freq_spacing)
     t,freq,timefreq,rms = gaussian_stft(s, sample_rate, window_length, increment, nstd=nstd, min_freq=min_freq, max_freq=max_freq)
 
-    #create log spectrogram (power in decibels)
-    spec = 20.0*np.log10(np.abs(timefreq)) + noise_level_db
-    #rectify spectrogram
-    spec[spec < 0.0] = 0.0
+    if log:
+        #create log spectrogram (power in decibels)
+        spec = 20.0*np.log10(np.abs(timefreq)) + noise_level_db
+        #rectify spectrogram
+        spec[spec < 0.0] = 0.0
+    else:
+        spec = np.abs(timefreq)
 
     return t,freq,spec,rms
-
 
 
 def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
