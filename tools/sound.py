@@ -1,4 +1,6 @@
 import copy
+import fnmatch
+import os
 import subprocess
 import wave
 import struct
@@ -44,9 +46,12 @@ class WavFile():
         wf.writeframes(''.join(hex_sound))
         wf.close()
 
-    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0):
+    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0):
 
         self.data_t = np.arange(0.0, len(self.data), 1.0) / self.sample_rate
+
+        #compute the spectral envelope
+        self.envelope = spectral_envelope(self.data, self.sample_rate, envelope_cutoff_freq)
 
         #compute log power spectrum
         fftx = fft(self.data)
@@ -71,11 +76,11 @@ class WavFile():
         self.spectrogram = spec
         self.spectrogram_rms = spec_rms
 
-    def plot(self, fig=None, show_rms=True):
+    def plot(self, fig=None, show_envelope=True):
 
         self.analyze()
 
-        if show_rms:
+        if show_envelope:
             spw_size = 15
             spec_size = 35
         else:
@@ -95,11 +100,11 @@ class WavFile():
         ax = fig.add_subplot(gs[s:e])
         plot_spectrogram(self.spectrogram_t, self.spectrogram_f, self.spectrogram, ax=ax, ticks=True)
 
-        if show_rms:
+        if show_envelope:
             ax = fig.add_subplot(gs[(e+5):95])
             plt.plot(self.spectrogram_t, self.spectrogram_rms, 'g-')
             plt.xlabel('Time (s)')
-            plt.ylabel('RMS')
+            plt.ylabel('Envelope')
             plt.axis('tight')
 
 
@@ -170,3 +175,29 @@ def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
     sfilt[sfilt < 0.0] = 0.0
     return sfilt
 
+
+def recursive_ls(root_dir, file_pattern):
+    """
+        Walks through all the files in root_dir and returns every file whose name matches
+        the pattern specified by file_pattern.
+    """
+
+    matches = list()
+    for root, dirnames, filenames in os.walk(root_dir):
+      for filename in fnmatch.filter(filenames, file_pattern):
+          matches.append(os.path.join(root, filename))
+    return matches
+
+
+def sox_convert_to_mono(file_path):
+    """
+        Uses Sox (sox.sourceforge.net) to convert a stereo .wav file to mono.
+    """
+
+    root_dir,file_name = os.path.split(file_path)
+
+    base_file_name = file_name[:-4]
+    output_file_path = os.path.join(root_dir, '%s_mono.wav' % base_file_name)
+    cmd = 'sox \"%s\" -c 1 \"%s\"' % (file_path, output_file_path)
+    print '%s' % cmd
+    subprocess.call(cmd, shell=True)
