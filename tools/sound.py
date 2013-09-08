@@ -10,6 +10,7 @@ from scipy.io.wavfile import read as read_wavfile
 from scipy.fftpack import fft,fftfreq
 
 import matplotlib.pyplot as plt
+import matplotlib.cm as cmap
 from tools.signal import lowpass_filter,gaussian_stft
 
 
@@ -31,6 +32,7 @@ class WavFile():
             wr.close()
 
             self.sample_rate,self.data = read_wavfile(file_name)
+        self.analyzed = False
 
     def to_wav(self, output_file, normalize=False, max_amplitude=32767.0):
         wf = wave.open(output_file, 'w')
@@ -46,7 +48,9 @@ class WavFile():
         wf.writeframes(''.join(hex_sound))
         wf.close()
 
-    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0):
+    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80):
+        if self.analyzed:
+            return
 
         self.data_t = np.arange(0.0, len(self.data), 1.0) / self.sample_rate
 
@@ -70,15 +74,18 @@ class WavFile():
             self.fundamental_freq = 0.0
 
         #compute log spectrogram
-        t,f,spec,spec_rms = spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate, freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq, log=self.log_spectrogram)
+        t,f,spec,spec_rms = spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate,
+                                        freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq,
+                                        log=self.log_spectrogram, noise_level_db=noise_level_db)
         self.spectrogram_t = t
         self.spectrogram_f = f
         self.spectrogram = spec
         self.spectrogram_rms = spec_rms
+        self.analyzed = True
 
-    def plot(self, fig=None, show_envelope=True):
+    def plot(self, fig=None, show_envelope=True, min_freq=0.0, max_freq=10000.0, colormap=cmap.gist_yarg, noise_level_db=80):
 
-        self.analyze()
+        self.analyze(min_freq=min_freq, max_freq=max_freq, noise_level_db=noise_level_db)
 
         if show_envelope:
             spw_size = 15
@@ -98,7 +105,7 @@ class WavFile():
         s = (spw_size+5)
         e = s + spec_size
         ax = fig.add_subplot(gs[s:e])
-        plot_spectrogram(self.spectrogram_t, self.spectrogram_f, self.spectrogram, ax=ax, ticks=True)
+        plot_spectrogram(self.spectrogram_t, self.spectrogram_f, self.spectrogram, ax=ax, ticks=True, colormap=colormap)
 
         if show_envelope:
             ax = fig.add_subplot(gs[(e+5):95])
@@ -108,7 +115,7 @@ class WavFile():
             plt.axis('tight')
 
 
-def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None):
+def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.YlGn):
     if ax is None:
         ax = plt.gca()
 
@@ -119,7 +126,7 @@ def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None):
     pfreq = freq[(freq >= fmin) & (freq <= fmax)]
 
     ex = (t.min(), t.max(), pfreq.min(), pfreq.max())
-    iax = ax.imshow(spec, aspect='auto', interpolation='nearest', origin='lower', extent=ex)
+    iax = ax.imshow(spec, aspect='auto', interpolation='nearest', origin='lower', extent=ex, cmap=colormap)
     if not ticks:
         ax.set_xticks([])
         ax.set_yticks([])
