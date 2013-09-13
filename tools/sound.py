@@ -1,5 +1,7 @@
 import copy
 import fnmatch
+from math import ceil
+from numpy.fft import fftshift
 import os
 import subprocess
 import wave
@@ -7,7 +9,7 @@ import struct
 
 import numpy as np
 from scipy.io.wavfile import read as read_wavfile
-from scipy.fftpack import fft,fftfreq
+from scipy.fftpack import fft,fftfreq,fft2
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmap
@@ -48,7 +50,7 @@ class WavFile():
         wf.writeframes(''.join(hex_sound))
         wf.close()
 
-    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80):
+    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True):
         if self.analyzed:
             return
 
@@ -76,7 +78,7 @@ class WavFile():
         #compute log spectrogram
         t,f,spec,spec_rms = spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate,
                                         freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq,
-                                        log=self.log_spectrogram, noise_level_db=noise_level_db)
+                                        log=self.log_spectrogram, noise_level_db=noise_level_db, rectify=rectify)
         self.spectrogram_t = t
         self.spectrogram_f = f
         self.spectrogram = spec
@@ -115,7 +117,7 @@ class WavFile():
             plt.axis('tight')
 
 
-def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.YlGn):
+def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.jet):
     if ax is None:
         ax = plt.gca()
 
@@ -132,6 +134,7 @@ def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, c
         ax.set_yticks([])
     else:
         ax.set_ylabel('Frequency (Hz)')
+        ax.set_xlabel('Time (s)')
 
 
 def play_sound(file_name):
@@ -139,7 +142,7 @@ def play_sound(file_name):
     subprocess.call(['play', file_name])
 
 
-def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80):
+def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True):
     """
         Given a sound pressure waveform, compute the log spectrogram. See documentation on gaussian_stft for arguments and return values.
 
@@ -154,8 +157,9 @@ def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_
     if log:
         #create log spectrogram (power in decibels)
         spec = 20.0*np.log10(np.abs(timefreq)) + noise_level_db
-        #rectify spectrogram
-        spec[spec < 0.0] = 0.0
+        if rectify:
+            #rectify spectrogram
+            spec[spec < 0.0] = 0.0
     else:
         spec = np.abs(timefreq)
 
@@ -208,3 +212,124 @@ def sox_convert_to_mono(file_path):
     cmd = 'sox \"%s\" -c 1 \"%s\"' % (file_path, output_file_path)
     print '%s' % cmd
     subprocess.call(cmd, shell=True)
+
+
+def generate_sine_wave(duration, freq, samprate):
+    """
+        Generate a pure tone at a given frequency and sample rate for a specified duration.
+    """
+
+    t = np.arange(0.0, duration, 1.0 / samprate)
+    return np.sin(2*np.pi*freq*t)
+
+
+def generate_simple_stack(duration, fundamental_freq, samprate, num_harmonics=10):
+    nsamps = int(duration*samprate)
+    s = np.zeros(nsamps, dtype='float')
+    ffreq = 0.0
+    for n in range(num_harmonics):
+        ffreq += fundamental_freq
+        s += generate_sine_wave(duration, ffreq, samprate)
+    return s
+
+
+def generate_harmonic_stack(duration, fundamental_freq, samprate, num_harmonics=10, base=2):
+
+    nsamps = int(duration*samprate)
+    s = np.zeros(nsamps, dtype='float')
+    for n in range(num_harmonics):
+        freq = fundamental_freq * base**n
+        s += generate_sine_wave(duration, freq, samprate)
+    return s
+
+
+def modulate_wave(s, samprate, freq):
+
+    t = np.arange(len(s), dtype='float') / samprate
+    c = np.sin(2*np.pi*t*freq)
+    return c*s
+
+
+def mps(spectrogram, df, dt):
+    """
+        Compute the modulation power spectrum for a given spectrogram.
+    """
+
+    #normalize and mean center the spectrogram
+    sdata = copy.copy(spectrogram)
+    sdata /= sdata.max()
+    sdata -= sdata.mean()
+
+    #take the 2D FFT and center it
+    smps = fft2(sdata)
+    smps = fftshift(smps)
+
+    #compute the log amplitude
+    mps_logamp = 20*np.log10(np.abs(smps)**2)
+    mps_logamp[mps_logamp < 0.0] = 0.0
+
+    #compute the phase
+    mps_phase = np.angle(smps)
+
+    #compute the axes
+    nf = mps_logamp.shape[0]
+    nt = mps_logamp.shape[1]
+    spectral_freq = fftshift(fftfreq(nf, d=df))
+    temporal_freq = fftshift(fftfreq(nt, d=dt))
+
+    """
+    nb = sdata.shape[1]
+    dwf = np.zeros(nb)
+    for ib in range(int(np.ceil((nb+1)/2.0))+1):
+        posindx = ib
+        negindx = nb-ib+2
+        print 'ib=%d, posindx=%d, negindx=%d' % (ib, posindx, negindx)
+        dwf[ib]= (ib-1)*(1.0/(df*nb))
+        if ib > 1:
+            dwf[negindx] =- dwf[ib]
+
+    nt = sdata.shape[0]
+    dwt = np.zeros(nt)
+    for it in range(0, int(np.ceil((nt+1)/2.0))+1):
+        posindx = it
+        negindx = nt-it+2
+        print 'it=%d, posindx=%d, negindx=%d' % (it, posindx, negindx)
+        dwt[it] = (it-1)*(1.0/(nt*dt))
+        if it > 1 :
+            dwt[negindx] = -dwt[it]
+
+    spectral_freq = dwf
+    temporal_freq = dwt
+    """
+
+    return temporal_freq,spectral_freq,mps_logamp,mps_phase
+
+
+def plot_mps(temporal_freq, spectral_freq, amp, phase):
+
+    plt.figure()
+
+    #plot the amplitude
+    plt.subplot(2, 1, 1)
+    #ex = (spectral_freq.min(), spectral_freq.max(), temporal_freq.min(), temporal_freq.max())
+    ex = (temporal_freq.min(), temporal_freq.max(), spectral_freq.min()*1e3, spectral_freq.max()*1e3)
+    plt.imshow(amp, interpolation='nearest', aspect='auto', cmap=cmap.jet, extent=ex)
+    plt.ylabel('Spectral Frequency (Cycles/KHz)')
+    plt.xlabel('Temporal Frequency (Hz)')
+    plt.colorbar()
+    plt.title('Magnitude')
+
+    #plot the phase
+    plt.subplot(2, 1, 2)
+    plt.imshow(phase, interpolation='nearest', aspect='auto', cmap=cmap.jet, extent=ex)
+    plt.ylabel('Spectral Frequency (Cycles/KHz)')
+    plt.xlabel('Temporal Frequency (Hz)')
+    plt.title('Phase')
+    plt.colorbar()
+
+
+
+
+
+
+
