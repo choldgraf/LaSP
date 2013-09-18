@@ -179,12 +179,12 @@ def create_random_psth(duration, smooth_win_size=10, samp_rate=1000.0, thresh=0.
     return psth
 
 
-def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001):
+def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offset=0.0, ylabel='Trial #'):
     """
         Make a raster plot of the trials of spike times.
 
-        spike_trials: an array of arrays of spike times in seconds, with a spike time of
-        zero indicating the onset of the stimulus.
+        spike_trials: an array of arrays of spike times in seconds.
+        time_offset: amount of time in seconds to offset the time axis for plotting
     """
 
     if ax is None:
@@ -202,12 +202,9 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001):
 
         if len(trial) == 0:
             continue
-        indx = (trial >= 0.0) & (trial <= duration)
-        if indx.sum() == 0:
-            continue
-        for st in trial[indx]:
+        for st in trial:
             y = k
-            x = int(st / bin_size)
+            x = int((st - time_offset) / bin_size)
             rect = Rectangle( (x, y), width=1, height=1)
             ax.add_patch(rect)
 
@@ -219,12 +216,13 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001):
     xt_newlabels = []
     for xtl in xt_oldlabels:
         try:
-            xt_nl = '%0.1f' % (float(xtl) / 1000.0)
+            xt = (float(xtl) * bin_size) + time_offset
+            xt_nl = '%0.1f' % xt
         except:
             xt_nl = ''
         xt_newlabels.append(xt_nl)
     ax.set_xticklabels(xt_newlabels)
-    ax.set_ylabel('Trial')
+    ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
     plt.axis('tight')
 
