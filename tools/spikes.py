@@ -4,6 +4,7 @@ from matplotlib.patches import Rectangle
 import numpy as np
 
 import matplotlib.pyplot as plt
+import operator
 
 
 def compute_joint_isi(spike_train1, spike_train2, window_size=0.500, bin_size=0.001):
@@ -179,12 +180,17 @@ def create_random_psth(duration, smooth_win_size=10, samp_rate=1000.0, thresh=0.
     return psth
 
 
-def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offset=0.0, ylabel='Trial #'):
+def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offset=0.0, ylabel='Trial #', groups=None):
     """
         Make a raster plot of the trials of spike times.
 
         spike_trials: an array of arrays of spike times in seconds.
         time_offset: amount of time in seconds to offset the time axis for plotting
+        groups: a dictionary that groups trials together. the key is the group name, and
+            the value is a list of indicies corresponding to a trial. The groups are
+            differentiated visually using a background color, and labeled on the y-axis.
+            The elements in the indicies array must be contiguous!
+
     """
 
     if ax is None:
@@ -198,18 +204,35 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offse
 
     nbins = (duration / bin_size)
 
-    for k,trial in enumerate(spike_trials):
+    #draw group backgrounds
+    if groups is not None:
+        #sort group names by min trial
+        group_list = [(group_name,min(trial_indicies)) for group_name,trial_indicies in groups.iteritems()]
+        group_list.sort(key=operator.itemgetter(1))
+        group_list = [x[0] for x in group_list]
+        for k,(group_name,trial_indicies) in enumerate(groups.iteritems()):
+            real_index = group_list.index(group_name)
+            if real_index % 2:
+                max_trial = max(trial_indicies)
+                y = len(spike_trials) - max_trial - 1
+                x = 0
+                h = len(trial_indicies)
+                w = nbins
+                rect = Rectangle( (x, y), width=w, height=h, fill=True, alpha=0.5, facecolor='#aaaaaa', linewidth=0.0)
+                ax.add_patch(rect)
 
+    #draw actual spikes
+    for k,trial in enumerate(spike_trials):
         if len(trial) == 0:
             continue
         for st in trial:
             y = len(spike_trials) - k - 1
             x = int((st - time_offset) / bin_size)
-            rect = Rectangle( (x, y), width=1, height=1)
+            rect = Rectangle( (x, y), width=1, height=1, linewidth=1.0, facecolor='#000000')
             ax.add_patch(rect)
 
+    #change x axis tick marks to reflect actual time
     ax.autoscale_view()
-
     ax.set_xlim(0.0, nbins)
     ax.figure.canvas.draw()
     xt_oldlabels = [x.get_text() for x in ax.get_xticklabels()]
@@ -222,7 +245,26 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offse
             xt_nl = ''
         xt_newlabels.append(xt_nl)
     ax.set_xticklabels(xt_newlabels)
-    ax.set_ylabel(ylabel)
+
+    if groups is None:
+        #change y axis tick labels to reflect trial number
+        y_labels = [y.get_text() for y in ax.get_yticklabels()]
+        y_labels.reverse()
+        ax.set_yticklabels(y_labels)
+    else:
+        ax.set_yticklabels([])
+        #change y axis tick labels to reflect group, one tick per group
+        yticks = list()
+        for k,(group_name,trial_indicies) in enumerate(groups.iteritems()):
+            min_trial = min(trial_indicies)
+            ypos = len(spike_trials) - (min_trial + (len(trial_indicies) / 2.0))
+            yticks.append( (ypos, group_name) )
+        yticks.sort(key=operator.itemgetter(0))
+        ax.set_yticks([y[0] for y in yticks])
+        ax.set_yticklabels([y[1] for y in yticks])
+
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
     plt.axis('tight')
 
