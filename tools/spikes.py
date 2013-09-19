@@ -203,7 +203,7 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offse
         if len(trial) == 0:
             continue
         for st in trial:
-            y = k
+            y = len(spike_trials) - k - 1
             x = int((st - time_offset) / bin_size)
             rect = Rectangle( (x, y), width=1, height=1)
             ax.add_patch(rect)
