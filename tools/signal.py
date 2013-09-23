@@ -8,7 +8,7 @@ from scipy.signal import lfilter, filter_design, resample
 import nitime.algorithms as ntalg
 
 
-def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5):
+def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
     """
         Lowpass filter a signal s, with sample rate sample_rate.
 
@@ -27,9 +27,40 @@ def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5):
     #filter the signal
     filtered_s = lfilter(b, a, s)
 
-    #rescale filtered signal
-    filtered_s /= filtered_s.max()
-    filtered_s *= s.max()
+    if rescale:
+        #rescale filtered signal
+        filtered_s /= filtered_s.max()
+        filtered_s *= s.max()
+
+    return filtered_s
+
+
+def bandpass_filter(s, sample_rate, low_freq, high_freq, filter_order=5, rescale=False):
+    """
+        Bandpass filter a signal s.
+
+        s: the signal
+        sample_rate: the sample rate in Hz of the signal
+        low_freq: the lower cutoff frequency
+        upper_freq: the upper cutoff frequency
+        filter_order: the order of the filter...
+
+        Returns the bandpass filtered signal s.
+    """
+
+
+    #create a butterworth filter
+    nyq = sample_rate / 2.0
+    f = np.array([low_freq, high_freq]) / nyq
+    b,a = filter_design.butter(filter_order, f, btype='bandpass')
+
+    #filter the signal
+    filtered_s = lfilter(b, a, s)
+
+    if rescale:
+        #rescale filtered signal
+        filtered_s /= filtered_s.max()
+        filtered_s *= s.max()
 
     return filtered_s
 
