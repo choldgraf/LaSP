@@ -2,6 +2,7 @@ import copy
 
 import numpy as np
 from scipy.interpolate import splrep,splev
+from scipy.stats import pearsonr
 
 import matplotlib.pyplot as plt
 
@@ -24,7 +25,7 @@ class HHT(object):
     def __init__(self):
         pass
 
-    def find_extrema(self, s, reflect=False):
+    def find_extrema(self, s):
         """
             Find the max and mins of a signal s.
         """
@@ -35,12 +36,14 @@ class HHT(object):
                             np.r_[True, s[1:] < s[:-1]],
                             np.r_[s[:-1] < s[1:], True])
         max_env[0] = max_env[-1] = False
-        mini = min_env.nonzero()[0]
-        maxi = max_env.nonzero()[0]
+
+        #exclude endpoints
+        mini = [m for m in min_env.nonzero()[0] if m != 0 and m != len(s)-1]
+        maxi = [m for m in max_env.nonzero()[0] if m != 0 and m != len(s)-1]
 
         return mini,maxi
 
-    def compute_imf(self, s, mean_tol=1e-6, stoppage_S=5, max_iter=5, reflect=True):
+    def compute_imf(self, s, mean_tol=1e-6, stoppage_S=3, max_iter=5, remove_edge_effects=True, plot=False):
         """
             Compute an intrinsic mode function from a signal s using sifting.
         """
@@ -51,7 +54,8 @@ class HHT(object):
         #find extrema for first iteration
         mini,maxi = self.find_extrema(s)
         #keep track of extrema difference
-        extrema_diffs = [np.abs(len(maxi) - len(mini)), ]
+        num_extrema = np.zeros([stoppage_S, 2])  # first column are maxima, second column are minima
+        num_extrema[-1, :] = [len(maxi), len(mini)]
         iter = 0
         while not stop:
 
@@ -60,15 +64,13 @@ class HHT(object):
             left_padding = 0
             right_padding = 0
 
-            #use reflection at the endpoints to reduce edge effects, from Rato et. al (2008) section 3.2.2
-            if reflect:
+            #add an extra oscillation at the beginning and end of the signal to reduce edge effects; from Rato et. al (2008) section 3.2.2
+            if remove_edge_effects:
                 Tl = maxi[0]  # index of left-hand (first) maximum
                 tl = mini[0]  # index of left-hand (first) minimum
-                dl = abs(Tl - tl)
 
                 Tr = maxi[-1]  # index of right hand (last) maximum
                 tr = mini[-1]  # index of right hand (last) minimum
-                dr = abs(Tr - tr)
 
                 #to reduce end effects, we need to extend the signal on both sides and reflect the first and last extrema
                 #so that interpolation works better at the edges
@@ -112,61 +114,84 @@ class HHT(object):
 
             t = np.arange(0, len(s_used))
             fit_index = range(left_padding, len(s_used)-right_padding)
+
             #fit minimums with cubic splines
-            min_spline = splrep(mini, s_used[mini])
+            spline_order = 3
+            if len(mini) <= 3:
+                spline_order = 1
+            min_spline = splrep(mini, s_used[mini], k=spline_order)
             min_fit = splev(t[fit_index], min_spline)
 
             #fit maximums with cubic splines
-            max_spline = splrep(maxi, s_used[maxi])
+            spline_order = 3
+            if len(mini) <= 3:
+                spline_order = 1
+            max_spline = splrep(maxi, s_used[maxi], k=spline_order)
             max_fit = splev(t[fit_index], max_spline)
 
-            plt.figure()
-            plt.plot(t[fit_index], max_fit, 'r-')
-            plt.plot(maxi, s_used[maxi], 'ro')
-            plt.plot(t, s_used, 'k-')
-            plt.plot(t[fit_index], min_fit, 'b-')
-            plt.plot(mini, s_used[mini], 'bo')
+            if plot:
+                plt.figure()
+                plt.plot(t[fit_index], max_fit, 'r-')
+                plt.plot(maxi, s_used[maxi], 'ro')
+                plt.plot(left_padding, 0.0, 'kx', markersize=10.0)
+                plt.plot(left_padding+len(s), 0.0, 'kx', markersize=10.0)
+                plt.plot(t, s_used, 'k-')
+                plt.plot(t[fit_index], min_fit, 'b-')
+                plt.plot(mini, s_used[mini], 'bo')
+                plt.suptitle('Iteration %d' % iter)
 
             #take average of max and min splines
             z = (max_fit + min_fit) / 2.0
 
+            #compute a factor used to dampen the subtraction of the mean spline; Rato et. al 2008, sec 3.2.3
+            alpha,palpha = pearsonr(imf, z)
+            alpha = min(alpha, 1e-2)
+
             #subtract off average of the two splines
-            d = imf - z
+            d = imf - alpha*z
 
             #set the IMF to the residual for next iteration
             imf = d
 
             #check for IMF S-stoppage criteria
             mini,maxi = self.find_extrema(imf)
-            extrema_diffs.append(np.abs(len(mini) - len(maxi)))
-            if len(extrema_diffs) >= stoppage_S:
-                ed = np.diff(extrema_diffs[-stoppage_S:])
-                if np.sum(ed) == 0 and np.abs(imf.mean()) < mean_tol:
+            num_extrema = np.roll(num_extrema, -1, axis=0)
+            num_extrema[-1, :] = [len(mini), len(maxi)]
+            if iter >= stoppage_S:
+                num_extrema_change = np.diff(num_extrema, axis=0)
+                de = np.abs(num_extrema[-1, 0] - num_extrema[-1, 1])
+                if np.abs(num_extrema_change).sum() == 0 and de < 2 and np.abs(imf.mean()) < mean_tol:
                     stop = True
             if iter > max_iter:
                 stop = True
-            print 'Iter %d: len(mini)=%d, len(maxi=%d), imf.mean()=%0.6f' % (iter, len(mini), len(maxi), imf.mean())
+            print 'Iter %d: len(mini)=%d, len(maxi=%d), imf.mean()=%0.6f, alpha=%0.2f' % (iter, len(mini), len(maxi), imf.mean(), alpha)
+            #print 'num_extrema=',num_extrema
             iter += 1
         return imf
 
-    def compute_emd(self, s, max_modes=np.inf):
+    def compute_emd(self, s, max_modes=np.inf, resid_tol=1e-3, max_sift_iter=100):
         """
             Perform the empirical mode decomposition on a signal s.
         """
 
-        imfs = list()
+        self.imfs = list()
         #make a copy of the signal that will hold the residual
         r = copy.copy(s)
         stop = False
         while not stop:
             #compute the IMF from the signal
-            imf = self.compute_imf(r)
-            imfs.append(imf)
+            imf = self.compute_imf(r, max_iter=max_sift_iter, mean_tol=resid_tol)
+            self.imfs.append(imf)
 
             #subtract the IMF off to produce a new residual
             r -= imf
 
+            #compute extrema for detecting a trend IMF
+            maxi,mini = self.find_extrema(r)
+
             #compute convergence criteria
-            if len(imfs) == max_modes:
+            if np.abs(r).sum() < resid_tol or len(self.imfs) == max_modes or (len(maxi) == 0 and len(mini) == 0):
                 stop = True
 
+        #append the residual as the last mode
+        self.imfs.append(r)
