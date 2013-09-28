@@ -2,6 +2,7 @@ import copy
 
 import numpy as np
 from scipy.interpolate import splrep,splev
+from scipy.signal import hilbert
 from scipy.stats import pearsonr
 
 import matplotlib.pyplot as plt
@@ -195,3 +196,27 @@ class HHT(object):
 
         #append the residual as the last mode
         self.imfs.append(r)
+
+    def compute_timefreq(self):
+        """
+            Compute a time-frequency representation of the signal by taking the instantaneous frequency
+            of the hilbert transform of the intrinsic mode functions (IMFs).
+        """
+
+        for imf in self.imfs:
+            #compute analytic signal of the IMF
+            ht = hilbert(imf)
+            #the phase of the complex signal is the instantaneous frequency
+            ifreq = np.angle(ht)
+            iamp = np.abs(ht)
+
+    def normalized_hilbert(self, s):
+        """
+            Perform the "Normalized" Hilbert transform (Huang 2008 sec. 3.1) on the signal s. This function
+            decomposes the signal s into AM and FM components.
+        """
+        pass
+
+
+
+

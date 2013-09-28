@@ -1,3 +1,4 @@
+from scipy.signal import hilbert
 import unittest
 
 import numpy as np
@@ -15,6 +16,7 @@ class TestHHT(unittest.TestCase):
     def tearDown(self):
         pass
 
+    """
     def test_sifting(self):
 
         #create a sine wave as a test signal
@@ -53,7 +55,6 @@ class TestHHT(unittest.TestCase):
 
         assert imf.mean() < 1e-3
 
-        """
         plt.figure()
         plt.subplot(2, 1, 1)
         plt.plot(t, s, 'k-')
@@ -62,7 +63,6 @@ class TestHHT(unittest.TestCase):
         plt.plot(t, imf, 'b-')
         plt.title('First IMF')
         plt.show()
-        """
 
     def test_emd(self):
         #create a sine wave as a test signal
@@ -90,4 +90,50 @@ class TestHHT(unittest.TestCase):
             plt.subplot(n+1, 1, k+2)
             plt.plot(t, hht.imfs[k], 'b-')
             plt.axis('tight')
+        plt.show()
+    """
+
+    def test_timefreq(self):
+
+        #create a sine wave as a test signal
+        dt = 1e-6
+        duration = 1.0
+        t = np.arange(0.0, duration, dt)
+
+        #create a more complex time series
+        s = np.zeros([len(t)])
+        for f in [5, 10, 15, 35]:
+            s += np.sin(2*np.pi*t*f)
+
+        hht = HHT()
+        hht.compute_emd(s)
+
+        assert len(hht.imfs) > 1
+
+        for k,imf in enumerate(hht.imfs):
+
+            #compute analytic signal of the IMF
+            ht = hilbert(imf)
+            #the phase of the complex signal is the instantaneous frequency
+            ifreq = np.angle(ht, deg=True) % 360
+            iamp = np.abs(ht)
+
+            plt.figure()
+            plt.subplot(4, 1, 1)
+            plt.plot(t, s, 'k-')
+            plt.axis('tight')
+            plt.title('Signal')
+            plt.subplot(4, 1, 2)
+            plt.plot(t, imf, 'b-')
+            plt.axis('tight')
+            plt.title('IMF #%d' % k)
+            plt.subplot(4, 1, 3)
+            plt.plot(t, iamp, 'r-')
+            plt.axis('tight')
+            plt.title('Instantaneous Amplitude')
+            plt.subplot(4, 1, 4)
+            plt.plot(t, ifreq, 'g-')
+            plt.axis('tight')
+            plt.title('Instantaneous Frequency')
+
         plt.show()
