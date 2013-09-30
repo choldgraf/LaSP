@@ -8,6 +8,19 @@ from scipy.stats import pearsonr
 import matplotlib.pyplot as plt
 
 
+class IMF(object):
+    """
+        Container class for IMF and it's properties.
+    """
+    def __init__(self):
+        self.imf = None
+        self.std = None
+        self.am = None
+        self.fm = None
+        self.phase = None
+        self.ifreq = None
+
+
 class HHT(object):
     """
         An implementation of the Hilbert-Huang transform. Based on code from PyHHT:
@@ -65,7 +78,10 @@ class HHT(object):
         self.ensemble_noise_gain = ensemble_noise_gain
         self.hilbert_max_iter = hilbert_max_iter
 
-        self.compute_emd(self.s)
+        self.imfs = list()
+
+        if compute_on_init:
+            self.compute_emd(self.s)
 
     def find_extrema(self, s):
         """
@@ -240,7 +256,6 @@ class HHT(object):
         """
 
         self.imfs = list()
-        self.imf_stds = list()
         #make a copy of the signal that will hold the residual
         r = copy.copy(s)
         stop = False
@@ -252,8 +267,18 @@ class HHT(object):
             else:
                 imf_mean,imf_std = self.compute_imf_ensemble(r)
 
-            self.imfs.append(imf_mean)
-            self.imf_stds.append(imf_std)
+            #compute the normalized hilbert transform
+            am,fm,phase,ifreq = self.normalized_hilbert(imf_mean)
+
+            #construct an IMF object
+            imf = IMF()
+            imf.imf = imf_mean
+            imf.std = imf_std
+            imf.am = am
+            imf.fm = fm
+            imf.phase = phase
+            imf.ifreq = ifreq
+            self.imfs.append(imf)
 
             #subtract the IMF off to produce a new residual
             r -= imf_mean
