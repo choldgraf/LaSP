@@ -97,6 +97,7 @@ class TestHHT(unittest.TestCase):
 
         #create a sine wave as a test signal
         dt = 1e-6
+        sr = 1.0 / dt
         duration = 1.0
         t = np.arange(0.0, duration, dt)
 
@@ -105,34 +106,42 @@ class TestHHT(unittest.TestCase):
         for f in [5, 10, 15, 35]:
             s += np.sin(2*np.pi*t*f)
 
-        hht = HHT()
+        hht = HHT(sample_rate=sr)
         hht.compute_emd(s)
 
         assert len(hht.imfs) > 1
 
         for k,imf in enumerate(hht.imfs):
-
-            #compute analytic signal of the IMF
-            ht = hilbert(imf)
-            #the phase of the complex signal is the instantaneous frequency
-            ifreq = np.angle(ht, deg=True) % 360
-            iamp = np.abs(ht)
-
+            am,fm,phase,ifreq = hht.decompose_imf(imf)
             plt.figure()
-            plt.subplot(4, 1, 1)
+
+            plt.subplot(6, 1, 1)
             plt.plot(t, s, 'k-')
             plt.axis('tight')
             plt.title('Signal')
-            plt.subplot(4, 1, 2)
+
+            plt.subplot(6, 1, 2)
             plt.plot(t, imf, 'b-')
             plt.axis('tight')
             plt.title('IMF #%d' % k)
-            plt.subplot(4, 1, 3)
-            plt.plot(t, iamp, 'r-')
+
+            plt.subplot(6, 1, 3)
+            plt.plot(t, am, 'r-')
             plt.axis('tight')
-            plt.title('Instantaneous Amplitude')
-            plt.subplot(4, 1, 4)
-            plt.plot(t, ifreq, 'g-')
+            plt.title('AM Component')
+
+            plt.subplot(6, 1, 4)
+            plt.plot(t, fm, 'g-')
+            plt.axis('tight')
+            plt.title('FM Component')
+
+            plt.subplot(6, 1, 5)
+            plt.plot(t, phase, 'k-')
+            plt.axis('tight')
+            plt.title('Phase')
+
+            plt.subplot(6, 1, 6)
+            plt.plot(t, ifreq, 'k-')
             plt.axis('tight')
             plt.title('Instantaneous Frequency')
 

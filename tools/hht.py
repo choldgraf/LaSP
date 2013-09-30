@@ -23,8 +23,8 @@ class HHT(object):
         and Signal Processing 22 1374-1394
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, sample_rate):
+        self.sample_rate = sample_rate
 
     def find_extrema(self, s):
         """
@@ -210,25 +210,73 @@ class HHT(object):
             ifreq = np.angle(ht)
             iamp = np.abs(ht)
 
-    def decompose_imf(self, s):
+    def decompose_imf(self, s, max_iter=20):
         """
             Perform the "Normalized" Hilbert transform (Huang 2008 sec. 3.1) on the IMF s, decomposing the
-            signal s into AM and FM components.
+            signal s into AM and FM components. Returns am,fm,phase - am is the AM component, fm is the FM
+            component, phase is the the arccos of fm.
         """
 
-        f = copy.copy(s)
-        mini,maxi = self.find_extrema(np.abs(f))
-        spline_order = 3
-        if len(maxi) <= 3:
-            spline_order = 1
-        #TODO reflect first and last maxima to remove edge effects for interpolation
-        max_spline = splrep(maxi, f[maxi], k=spline_order)
-        max_fit = splev(t[fit_index], max_spline)
+        x = copy.copy(s)
+        iter = 0
+        converged = False
 
+        while not converged:
+            #take the absolute value of the IMF and find the extrema
+            absx = np.abs(x)
+            mini,maxi = self.find_extrema(absx)
+            spline_order = 3
 
-        #find the maximum values of |s|
+            #reflect first and last maxima to remove edge effects for interpolation
+            left_padding = maxi[0]
+            right_padding = len(x) - maxi[-1]
+            x_padded = np.zeros([len(x)+left_padding+right_padding])
+            x_padded[left_padding:-right_padding] = absx
+            x_padded[0] = absx[maxi[0]]
+            x_padded[-1] = absx[maxi[-1]]
 
+            #create new array of extremas
+            new_maxi = [i+left_padding for i in maxi]
+            new_maxi.insert(0, 0)
+            new_maxi.append(len(x_padded)-1)
 
+            #fit a cubic spline to the extrema of the absolute value of the signal
+            if len(maxi) <= 3:
+                spline_order = 1
+            max_spline = splrep(new_maxi, x_padded[new_maxi], k=spline_order)
 
+            #use the spline to interpolate over the course of the signal
+            t = np.arange(0, len(x_padded))
+            fit_index = range(left_padding, len(x_padded)-right_padding)
+            env = splev(t[fit_index], max_spline)
 
+            """
+            plt.figure()
+            plt.plot(t, x_padded, 'k-')
+            plt.plot(new_maxi, x_padded[new_maxi], 'ro-', markersize=8)
+            plt.axis('tight')
+            plt.suptitle('Iter %d' % iter)
+            """
 
+            #divide by envelope
+            x /= env
+
+            #check for convergence
+            iter += 1
+            if iter >= max_iter:
+                converged = True
+            if (x.max() - 1.0) <= 1e-6:
+                converged = True
+
+        #compute the FM and AM components
+        fm = x
+        am = s / fm
+
+        #compute the phase
+        phase = np.arccos(fm)
+
+        #compute the instantaneous frequency
+        ifreq = np.zeros([len(phase)])
+        ifreq[1:] = np.diff(phase) * self.sample_rate
+
+        return am,fm,phase,ifreq
