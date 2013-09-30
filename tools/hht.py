@@ -14,13 +14,16 @@ class HHT(object):
 
         https://github.com/jaidevd/pyhht
 
-        Two useful papers:
+        Three useful papers:
 
         N. E. Huang et al., "The empirical mode decomposition and the Hilbert spectrum for non-linear and non
         stationary time series analysis, Proc. Royal Soc. London A, Vol. 454, pp. 903-995, 1998
 
         Rato R.T., Ortigueira M.D., Batista A.G 2008 "On the HHT, its problems, and some solutions." Mechanical Systems
         and Signal Processing 22 1374-1394
+
+        Huang, N. E., and Z. Wu (2008), A review on Hilbert-Huang transform: Method and its applications to geophysical studies,
+        Rev. Geophys., 46, RG2006, doi:10.1029/2007RG000228
     """
 
     def __init__(self, s, sample_rate, emd_max_modes=np.inf, emd_resid_tol=1e-3,
@@ -268,8 +271,8 @@ class HHT(object):
     def normalized_hilbert(self, s):
         """
             Perform the "Normalized" Hilbert transform (Huang 2008 sec. 3.1) on the IMF s, decomposing the
-            signal s into AM and FM components. Returns am,fm,phase - am is the AM component, fm is the FM
-            component, phase is the the arccos of fm.
+            signal s into AM and FM components. Returns am,fm,phase,ifreq - am is the AM component, fm is the FM
+            component, phase is the the arccos of fm, and ifreq is the instantaneous frequency.
         """
 
         x = copy.copy(s)
