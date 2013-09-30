@@ -23,8 +23,46 @@ class HHT(object):
         and Signal Processing 22 1374-1394
     """
 
-    def __init__(self, sample_rate):
+    def __init__(self, s, sample_rate, emd_max_modes=np.inf, emd_resid_tol=1e-3,
+                 sift_mean_tol=1e-3, sift_stoppage_S=3, sift_max_iter=100, sift_remove_edge_effects=True,
+                 ensemble_num_samples=1, ensemble_noise_gain=1.5,
+                 hilbert_max_iter=20,
+                 compute_on_init=True):
+        """
+            Initialize the Hilbert-Huang Transform (HHT). Parameters include:
+
+            s: the signal to be transformed
+            sample_rate: sample rate of the signal
+
+            emd_max_modes: the maximum number of IMFs to extract (default=infinity)
+            emd_resid_tol: stop EMD when the square sum of components of the residual is less than this quantity (default=1e-3)
+
+            sift_mean_tol: stop sifting for an IMF when the sum of squares of the mean between upper and lower envelopes is lower than this value (default=1e-3)
+            sift_stoppage_S: the number of iterations to apply the S-stoppage criteria (default=3)
+            sift_max_iter: the maximum allowed number of sift iterations (default=100)
+            sift_remove_edge_effects: whether or not to mirror the extrema on both ends of s to reduce edge effects (default=True)
+
+            ensemble_num_samples: the number of samples to take when when doing ensemble EMD (default=1, implies no ensemble)
+            ensemble_noise_gain: the number of standard deviations of the signal that are used to construct the standard deviation of the noise (default=1.5)
+
+            hilbert_max_iter: maximum number of iterations when applying normalized Hilbert transform to an IMF
+
+            compute_on_init: whether to perform the EMD when the constructor is called (default=True)
+        """
+
+        self.s = s
         self.sample_rate = sample_rate
+        self.emd_max_modes = emd_max_modes
+        self.emd_resid_tol = emd_resid_tol
+        self.sift_mean_tol = sift_mean_tol
+        self.sift_stoppage_S = sift_stoppage_S
+        self.sift_max_iter = sift_max_iter
+        self.sift_remove_edge_effects = sift_remove_edge_effects
+        self.ensemble_num_samples = ensemble_num_samples
+        self.ensemble_noise_gain = ensemble_noise_gain
+        self.hilbert_max_iter = hilbert_max_iter
+
+        self.compute_emd(self.s)
 
     def find_extrema(self, s):
         """
@@ -44,7 +82,30 @@ class HHT(object):
 
         return mini,maxi
 
-    def compute_imf(self, s, mean_tol=1e-6, stoppage_S=3, max_iter=5, remove_edge_effects=True, plot=False):
+    def compute_imf_ensemble(self, s):
+        """
+            Computes the ensemble-empirical model decomposition (EEMD, Huang et. al 2008).
+        """
+        noise_std = self.ensemble_noise_gain*s.std()
+        imf_mean = None
+        imf_std = None
+
+        for k in range(self.ensemble_num_samples):
+            noise = np.random.randn(len(s))*noise_std
+            imf = self.compute_imf(s+noise)
+            if imf_mean is None:
+                imf_mean = imf
+                imf_std = np.zeros_like(imf_mean)
+            else:
+                resid = imf - imf_mean
+                imf_mean = imf_mean + resid / (k+1)
+                imf_std = imf_std + resid*(imf - imf_mean)
+
+        imf_std = np.sqrt(imf_std) / (self.ensemble_num_samples - 1)
+
+        return imf_mean,imf_std
+
+    def compute_imf(self, s, plot=False):
         """
             Compute an intrinsic mode function from a signal s using sifting.
         """
@@ -55,7 +116,7 @@ class HHT(object):
         #find extrema for first iteration
         mini,maxi = self.find_extrema(s)
         #keep track of extrema difference
-        num_extrema = np.zeros([stoppage_S, 2])  # first column are maxima, second column are minima
+        num_extrema = np.zeros([self.sift_stoppage_S, 2])  # first column are maxima, second column are minima
         num_extrema[-1, :] = [len(maxi), len(mini)]
         iter = 0
         while not stop:
@@ -66,7 +127,7 @@ class HHT(object):
             right_padding = 0
 
             #add an extra oscillation at the beginning and end of the signal to reduce edge effects; from Rato et. al (2008) section 3.2.2
-            if remove_edge_effects:
+            if self.sift_remove_edge_effects:
                 Tl = maxi[0]  # index of left-hand (first) maximum
                 tl = mini[0]  # index of left-hand (first) minimum
 
@@ -158,59 +219,53 @@ class HHT(object):
             mini,maxi = self.find_extrema(imf)
             num_extrema = np.roll(num_extrema, -1, axis=0)
             num_extrema[-1, :] = [len(mini), len(maxi)]
-            if iter >= stoppage_S:
+            if iter >= self.sift_stoppage_S:
                 num_extrema_change = np.diff(num_extrema, axis=0)
                 de = np.abs(num_extrema[-1, 0] - num_extrema[-1, 1])
-                if np.abs(num_extrema_change).sum() == 0 and de < 2 and np.abs(imf.mean()) < mean_tol:
+                if np.abs(num_extrema_change).sum() == 0 and de < 2 and np.abs(imf.mean()) < self.sift_mean_tol:
                     stop = True
-            if iter > max_iter:
+            if iter > self.sift_max_iter:
                 stop = True
             print 'Iter %d: len(mini)=%d, len(maxi=%d), imf.mean()=%0.6f, alpha=%0.2f' % (iter, len(mini), len(maxi), imf.mean(), alpha)
             #print 'num_extrema=',num_extrema
             iter += 1
         return imf
 
-    def compute_emd(self, s, max_modes=np.inf, resid_tol=1e-3, max_sift_iter=100):
+    def compute_emd(self, s):
         """
             Perform the empirical mode decomposition on a signal s.
         """
 
         self.imfs = list()
+        self.imf_stds = list()
         #make a copy of the signal that will hold the residual
         r = copy.copy(s)
         stop = False
         while not stop:
             #compute the IMF from the signal
-            imf = self.compute_imf(r, max_iter=max_sift_iter, mean_tol=resid_tol)
-            self.imfs.append(imf)
+            if self.ensemble_num_samples == 1:
+                imf_mean = self.compute_imf(r)
+                imf_std = np.zeros_like(imf_mean)
+            else:
+                imf_mean,imf_std = self.compute_imf_ensemble(r)
+
+            self.imfs.append(imf_mean)
+            self.imf_stds.append(imf_std)
 
             #subtract the IMF off to produce a new residual
-            r -= imf
+            r -= imf_mean
 
             #compute extrema for detecting a trend IMF
             maxi,mini = self.find_extrema(r)
 
             #compute convergence criteria
-            if np.abs(r).sum() < resid_tol or len(self.imfs) == max_modes or (len(maxi) == 0 and len(mini) == 0):
+            if np.abs(r).sum() < self.emd_resid_tol or len(self.imfs) == self.emd_max_modes or (len(maxi) == 0 and len(mini) == 0):
                 stop = True
 
         #append the residual as the last mode
-        self.imfs.append(r)
+        self.emd_residual = r
 
-    def compute_timefreq(self):
-        """
-            Compute a time-frequency representation of the signal by taking the instantaneous frequency
-            of the hilbert transform of the intrinsic mode functions (IMFs).
-        """
-
-        for imf in self.imfs:
-            #compute analytic signal of the IMF
-            ht = hilbert(imf)
-            #the phase of the complex signal is the instantaneous frequency
-            ifreq = np.angle(ht)
-            iamp = np.abs(ht)
-
-    def decompose_imf(self, s, max_iter=20):
+    def normalized_hilbert(self, s):
         """
             Perform the "Normalized" Hilbert transform (Huang 2008 sec. 3.1) on the IMF s, decomposing the
             signal s into AM and FM components. Returns am,fm,phase - am is the AM component, fm is the FM
@@ -263,7 +318,7 @@ class HHT(object):
 
             #check for convergence
             iter += 1
-            if iter >= max_iter:
+            if iter >= self.hilbert_max_iter:
                 converged = True
             if (x.max() - 1.0) <= 1e-6:
                 converged = True
