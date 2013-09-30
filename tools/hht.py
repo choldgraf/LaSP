@@ -125,7 +125,7 @@ class HHT(object):
 
             #fit maximums with cubic splines
             spline_order = 3
-            if len(mini) <= 3:
+            if len(maxi) <= 3:
                 spline_order = 1
             max_spline = splrep(maxi, s_used[maxi], k=spline_order)
             max_fit = splev(t[fit_index], max_spline)
@@ -210,12 +210,24 @@ class HHT(object):
             ifreq = np.angle(ht)
             iamp = np.abs(ht)
 
-    def normalized_hilbert(self, s):
+    def decompose_imf(self, s):
         """
-            Perform the "Normalized" Hilbert transform (Huang 2008 sec. 3.1) on the signal s. This function
-            decomposes the signal s into AM and FM components.
+            Perform the "Normalized" Hilbert transform (Huang 2008 sec. 3.1) on the IMF s, decomposing the
+            signal s into AM and FM components.
         """
-        pass
+
+        f = copy.copy(s)
+        mini,maxi = self.find_extrema(np.abs(f))
+        spline_order = 3
+        if len(maxi) <= 3:
+            spline_order = 1
+        #TODO reflect first and last maxima to remove edge effects for interpolation
+        max_spline = splrep(maxi, f[maxi], k=spline_order)
+        max_fit = splev(t[fit_index], max_spline)
+
+
+        #find the maximum values of |s|
+
 
 
 
