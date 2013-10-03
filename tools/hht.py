@@ -308,6 +308,9 @@ class HHT(object):
             #take the absolute value of the IMF and find the extrema
             absx = np.abs(x)
             mini,maxi = self.find_extrema(absx)
+            if len(mini) == 0 or len(maxi) == 0:
+                converged = True
+                break
             spline_order = 3
 
             #reflect first and last maxima to remove edge effects for interpolation
@@ -349,6 +352,8 @@ class HHT(object):
             if iter >= self.hilbert_max_iter:
                 converged = True
             if (x.max() - 1.0) <= 1e-6:
+                converged = True
+            if len(mini) == 0 or len(maxi) == 0:
                 converged = True
 
         #compute the FM and AM components

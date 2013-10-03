@@ -6,6 +6,7 @@ from scipy.fftpack import fft,fftfreq
 from scipy.signal import lfilter, filter_design, resample
 
 import nitime.algorithms as ntalg
+from tools.coherence import compute_coherence
 
 
 def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
@@ -112,8 +113,8 @@ class GaussianWindowSpectrumEstimator(PowerSpectrumEstimator):
         self.gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
 
         #window the signal and take the FFT
-        windowed_slice = signal*self.gauss_window
         fft_len = len(signal)
+        windowed_slice = signal[:fft_len]*self.gauss_window[:fft_len]
         s_fft = fft(windowed_slice, n=fft_len, overwrite_x=1)
         freq = fftfreq(fft_len, d=1.0 / sample_rate)
 
@@ -173,8 +174,8 @@ def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=
     zs = np.zeros([len(s) + 2*hnwinlen])
     zs[hnwinlen:-hnwinlen] = s
 
-    #get the frequencies corresponding to the FFTs to come
-    full_freq = fftfreq(nwinlen, d=1.0 / sample_rate)
+    #get the values for the frequency axis by estimating the spectrum of a dummy slice
+    full_freq,ps = spectrum_estimator.estimate(np.zeros([2*hnwinlen+1]), sample_rate)
     freq_index = (full_freq >= min_freq) & (full_freq <= max_freq)
     freq = full_freq[freq_index]
     nfreq = freq_index.sum()
@@ -206,6 +207,35 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
     return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
 
 
+def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0):
+    """
+        Compute the running cross coherence between two time series.
+    """
+    assert len(s1) == len(s2)
 
+    #compute lengths in # of samples
+    nwinlen = int(sample_rate*window_size)
+    if nwinlen % 2 == 0:
+        nwinlen += 1
 
+    slen = len(s1)
+    nincrement = int(sample_rate*increment)
+    nwindows = slen / nincrement
 
+    #get frequency axis values by computing coherence between dummy slice
+    z = np.zeros([nwinlen])
+    cdata = compute_coherence(z, z, sample_rate, window_size=window_size, bandwidth=bandwidth)
+    freq = cdata.frequency
+
+    timefreq = np.zeros([len(freq), nwindows])
+
+    #compute the coherence for each slice
+    for k in range(nwindows):
+        i1 = k*nwinlen
+        i2 = i1 + nwinlen
+
+        cdata = compute_coherence(s1[i1:i2], s2[i1:i2], sample_rate, window_size=window_size, bandwidth=bandwidth)
+        timefreq[:, k] = cdata.coherence
+
+    t = np.arange(nwindows)*increment
+    return t,freq,timefreq
