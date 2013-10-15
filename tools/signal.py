@@ -236,7 +236,7 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
     timefreq = np.zeros([len(freq), nwindows])
 
     #compute the coherence for each window
-    print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
+    #print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
     for k in range(nwindows):
         #get the indices of the window within the signals
         center = k*nincrement
@@ -260,8 +260,8 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         win2[sii:eii] = s2[si:ei]
         s1sum = np.abs(win1).sum()
         s2sum = np.abs(win2).sum()
-        print '(%0.2f, %0.2f, %0.2f), s1sum=%0.0f, s2sum=%0.0f, k=%d, center=%d, si=%d, ei=%d, sii=%d, eii=%d' % \
-              ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
+        #print '(%0.2f, %0.2f, %0.2f), s1sum=%0.0f, s2sum=%0.0f, k=%d, center=%d, si=%d, ei=%d, sii=%d, eii=%d' % \
+        #      ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
 
         #compute the coherence
         cdata = compute_coherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
