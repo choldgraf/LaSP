@@ -258,8 +258,6 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         win2[:] = 0.0
         win1[sii:eii] = s1[si:ei]
         win2[sii:eii] = s2[si:ei]
-        s1sum = np.abs(win1).sum()
-        s2sum = np.abs(win2).sum()
         #print '(%0.2f, %0.2f, %0.2f), s1sum=%0.0f, s2sum=%0.0f, k=%d, center=%d, si=%d, ei=%d, sii=%d, eii=%d' % \
         #      ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
 
