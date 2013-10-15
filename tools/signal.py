@@ -3,7 +3,7 @@ from abc import ABCMeta,abstractmethod
 import numpy as np
 
 from scipy.fftpack import fft,fftfreq
-from scipy.signal import lfilter, filter_design, resample
+from scipy.signal import lfilter, filter_design, resample,filtfilt
 
 import nitime.algorithms as ntalg
 from tools.coherence import compute_coherence
@@ -26,7 +26,7 @@ def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
     b,a = filter_design.butter(filter_order, cutoff_freq / nyq)
 
     #filter the signal
-    filtered_s = lfilter(b, a, s)
+    filtered_s = filtfilt(b, a, s)
 
     if rescale:
         #rescale filtered signal
@@ -56,7 +56,7 @@ def bandpass_filter(s, sample_rate, low_freq, high_freq, filter_order=5, rescale
     b,a = filter_design.butter(filter_order, f, btype='bandpass')
 
     #filter the signal
-    filtered_s = lfilter(b, a, s)
+    filtered_s = filtfilt(b, a, s)
 
     if rescale:
         #rescale filtered signal
@@ -217,24 +217,54 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
     nwinlen = int(sample_rate*window_size)
     if nwinlen % 2 == 0:
         nwinlen += 1
+    hnwinlen = nwinlen / 2
 
+    #compute increment in number of samples
     slen = len(s1)
     nincrement = int(sample_rate*increment)
+
+    #compute number of windows
     nwindows = slen / nincrement
 
     #get frequency axis values by computing coherence between dummy slice
-    z = np.zeros([nwinlen])
-    cdata = compute_coherence(z, z, sample_rate, window_size=window_size, bandwidth=bandwidth)
+    win1 = np.zeros([nwinlen])
+    win2 = np.zeros([nwinlen])
+    cdata = compute_coherence(win1+1.0, win2+1.0, sample_rate, window_size=window_size, bandwidth=bandwidth)
     freq = cdata.frequency
 
+    #construct the time-frequency representation for time-varying coherence
     timefreq = np.zeros([len(freq), nwindows])
 
-    #compute the coherence for each slice
+    #compute the coherence for each window
+    print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
     for k in range(nwindows):
-        i1 = k*nwinlen
-        i2 = i1 + nwinlen
+        #get the indices of the window within the signals
+        center = k*nincrement
+        si = center - hnwinlen
+        ei = center + hnwinlen + 1
 
-        cdata = compute_coherence(s1[i1:i2], s2[i1:i2], sample_rate, window_size=window_size, bandwidth=bandwidth)
+        #adjust indices to deal with edge-padding
+        sii = 0
+        if si < 0:
+            sii = abs(si)
+            si = 0
+        eii = sii + nwinlen
+        if ei > slen:
+            eii = sii + nwinlen - (ei - slen)
+            ei = slen
+
+        #set the content of the windows
+        win1[:] = 0.0
+        win2[:] = 0.0
+        win1[sii:eii] = s1[si:ei]
+        win2[sii:eii] = s2[si:ei]
+        s1sum = np.abs(win1).sum()
+        s2sum = np.abs(win2).sum()
+        print '(%0.2f, %0.2f, %0.2f), s1sum=%0.0f, s2sum=%0.0f, k=%d, center=%d, si=%d, ei=%d, sii=%d, eii=%d' % \
+              ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
+
+        #compute the coherence
+        cdata = compute_coherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
         timefreq[:, k] = cdata.coherence
 
     t = np.arange(nwindows)*increment
