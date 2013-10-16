@@ -35,6 +35,32 @@ def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
 
     return filtered_s
 
+def highpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
+    """
+        Highpass filter a signal s, with sample rate sample_rate.
+
+        s: the signal
+        sample_rate: the sample rate in Hz of the signal
+        cutoff_freq: the cutoff frequency of the filter
+        filter_order: the order of the filter...
+
+        Returns the low-pass filtered signal s.
+    """
+
+    #create a butterworth filter
+    nyq = sample_rate / 2.0
+    b,a = filter_design.butter(filter_order, cutoff_freq / nyq, btype='high')
+
+    #filter the signal
+    filtered_s = filtfilt(b, a, s)
+
+    if rescale:
+        #rescale filtered signal
+        filtered_s /= filtered_s.max()
+        filtered_s *= s.max()
+
+    return filtered_s
+
 
 def bandpass_filter(s, sample_rate, low_freq, high_freq, filter_order=5, rescale=False):
     """

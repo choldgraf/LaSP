@@ -7,7 +7,7 @@ from matplotlib import cm
 
 import matplotlib.pyplot as plt
 
-from tools.signal import cross_coherence,bandpass_filter,lowpass_filter
+from tools.signal import cross_coherence,bandpass_filter,lowpass_filter,highpass_filter
 
 
 class TestSignals(unittest.TestCase):
@@ -83,7 +83,7 @@ class TestSignals(unittest.TestCase):
         low_s = lowpass_filter(s1, sr, 4.0)
         med_s = bandpass_filter(s1, sr, 4.0, 13.0, filter_order=3)
         high_s = bandpass_filter(s1, sr, 13.0, 35.0)
-        highhigh_s = bandpass_filter(s1, sr, 30.0, 110.0)
+        highhigh_s = highpass_filter(s1, sr, 35.0)
 
         freq,ps = self.power_spec(s1, sr)
         lowfreq,lowps = self.power_spec(low_s, sr)
