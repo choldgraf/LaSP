@@ -206,7 +206,10 @@ def plot_raster(spike_trials, ax=None, duration=None, bin_size=0.001, time_offse
 
     #draw group backgrounds
     if groups is not None:
-        #sort group names by min trial
+
+        #first make sure indicies are lists
+        groups = dict([(kk, vv if type(vv) is list else [vv]) for kk, vv in groups.iteritems()])
+        #sort group names by min trial        
         group_list = [(group_name,min(trial_indicies)) for group_name,trial_indicies in groups.iteritems()]
         group_list.sort(key=operator.itemgetter(1))
         group_list = [x[0] for x in group_list]
