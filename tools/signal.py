@@ -3,9 +3,10 @@ from abc import ABCMeta,abstractmethod
 import numpy as np
 
 from scipy.fftpack import fft,fftfreq
-from scipy.signal import lfilter, filter_design, resample
+from scipy.signal import lfilter, filter_design, resample,filtfilt
 
 import nitime.algorithms as ntalg
+from tools.coherence import compute_coherence
 
 
 def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
@@ -25,7 +26,33 @@ def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
     b,a = filter_design.butter(filter_order, cutoff_freq / nyq)
 
     #filter the signal
-    filtered_s = lfilter(b, a, s)
+    filtered_s = filtfilt(b, a, s)
+
+    if rescale:
+        #rescale filtered signal
+        filtered_s /= filtered_s.max()
+        filtered_s *= s.max()
+
+    return filtered_s
+
+def highpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
+    """
+        Highpass filter a signal s, with sample rate sample_rate.
+
+        s: the signal
+        sample_rate: the sample rate in Hz of the signal
+        cutoff_freq: the cutoff frequency of the filter
+        filter_order: the order of the filter...
+
+        Returns the low-pass filtered signal s.
+    """
+
+    #create a butterworth filter
+    nyq = sample_rate / 2.0
+    b,a = filter_design.butter(filter_order, cutoff_freq / nyq, btype='high')
+
+    #filter the signal
+    filtered_s = filtfilt(b, a, s)
 
     if rescale:
         #rescale filtered signal
@@ -55,7 +82,7 @@ def bandpass_filter(s, sample_rate, low_freq, high_freq, filter_order=5, rescale
     b,a = filter_design.butter(filter_order, f, btype='bandpass')
 
     #filter the signal
-    filtered_s = lfilter(b, a, s)
+    filtered_s = filtfilt(b, a, s)
 
     if rescale:
         #rescale filtered signal
@@ -112,8 +139,8 @@ class GaussianWindowSpectrumEstimator(PowerSpectrumEstimator):
         self.gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
 
         #window the signal and take the FFT
-        windowed_slice = signal*self.gauss_window
         fft_len = len(signal)
+        windowed_slice = signal[:fft_len]*self.gauss_window[:fft_len]
         s_fft = fft(windowed_slice, n=fft_len, overwrite_x=1)
         freq = fftfreq(fft_len, d=1.0 / sample_rate)
 
@@ -173,8 +200,8 @@ def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=
     zs = np.zeros([len(s) + 2*hnwinlen])
     zs[hnwinlen:-hnwinlen] = s
 
-    #get the frequencies corresponding to the FFTs to come
-    full_freq = fftfreq(nwinlen, d=1.0 / sample_rate)
+    #get the values for the frequency axis by estimating the spectrum of a dummy slice
+    full_freq,ps = spectrum_estimator.estimate(np.zeros([2*hnwinlen+1]), sample_rate)
     freq_index = (full_freq >= min_freq) & (full_freq <= max_freq)
     freq = full_freq[freq_index]
     nfreq = freq_index.sum()
@@ -206,6 +233,63 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
     return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
 
 
+def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0):
+    """
+        Compute the running cross coherence between two time series.
+    """
+    assert len(s1) == len(s2)
 
+    #compute lengths in # of samples
+    nwinlen = int(sample_rate*window_size)
+    if nwinlen % 2 == 0:
+        nwinlen += 1
+    hnwinlen = nwinlen / 2
 
+    #compute increment in number of samples
+    slen = len(s1)
+    nincrement = int(sample_rate*increment)
 
+    #compute number of windows
+    nwindows = slen / nincrement
+
+    #get frequency axis values by computing coherence between dummy slice
+    win1 = np.zeros([nwinlen])
+    win2 = np.zeros([nwinlen])
+    cdata = compute_coherence(win1+1.0, win2+1.0, sample_rate, window_size=window_size, bandwidth=bandwidth)
+    freq = cdata.frequency
+
+    #construct the time-frequency representation for time-varying coherence
+    timefreq = np.zeros([len(freq), nwindows])
+
+    #compute the coherence for each window
+    #print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
+    for k in range(nwindows):
+        #get the indices of the window within the signals
+        center = k*nincrement
+        si = center - hnwinlen
+        ei = center + hnwinlen + 1
+
+        #adjust indices to deal with edge-padding
+        sii = 0
+        if si < 0:
+            sii = abs(si)
+            si = 0
+        eii = sii + nwinlen
+        if ei > slen:
+            eii = sii + nwinlen - (ei - slen)
+            ei = slen
+
+        #set the content of the windows
+        win1[:] = 0.0
+        win2[:] = 0.0
+        win1[sii:eii] = s1[si:ei]
+        win2[sii:eii] = s2[si:ei]
+        #print '(%0.2f, %0.2f, %0.2f), s1sum=%0.0f, s2sum=%0.0f, k=%d, center=%d, si=%d, ei=%d, sii=%d, eii=%d' % \
+        #      ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
+
+        #compute the coherence
+        cdata = compute_coherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
+        timefreq[:, k] = cdata.coherence
+
+    t = np.arange(nwindows)*increment
+    return t,freq,timefreq

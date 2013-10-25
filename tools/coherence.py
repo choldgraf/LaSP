@@ -403,7 +403,7 @@ def compute_coherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_le
     #compute DPSS tapers for signals
     NW = int(window_size*bandwidth)
     K = 2*NW - 1
-    print 'compute_coherence: NW=%d, K=%d' % (NW, K)
+    #print 'compute_coherence: NW=%d, K=%d' % (NW, K)
     tapers,eigs = ntalg.dpss_windows(sample_length_bins, NW, K)
 
     #break signal into chunks and estimate coherence for each chunk
@@ -411,7 +411,7 @@ def compute_coherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_le
     nleft = len(s1) % sample_length_bins
     if nleft > 0:
         nchunks += 1
-    print 'sample_length_bins=%d, # of chunks:%d, # samples in last chunk: %d' % (sample_length_bins, nchunks, nleft)
+    #print 'sample_length_bins=%d, # of chunks:%d, # samples in last chunk: %d' % (sample_length_bins, nchunks, nleft)
     coherence_estimates = list()
     for k in range(nchunks):
         s = k*sample_length_bins
