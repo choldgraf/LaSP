@@ -7,7 +7,7 @@ from matplotlib import cm
 
 import matplotlib.pyplot as plt
 
-from tools.signal import cross_coherence,bandpass_filter,lowpass_filter,highpass_filter
+from tools.signal import cross_coherence,bandpass_filter,lowpass_filter,highpass_filter, mt_power_spectrum
 
 
 class TestSignals(unittest.TestCase):
@@ -18,6 +18,7 @@ class TestSignals(unittest.TestCase):
     def tearDown(self):
         pass
 
+    """
     def test_cross_coherence(self):
 
         sr = 381.4697
@@ -133,6 +134,36 @@ class TestSignals(unittest.TestCase):
         plt.subplot(5, 2, 10)
         plt.plot(highhighfreq, highhighps, 'k-')
         plt.axis('tight')
+        plt.show()
+    """
+
+    def test_power_spec(self):
+        sr = 381.4697
+        dt = 1.0 / sr
+        duration = 100.0 + dt
+
+        t = np.arange(0, int(duration*sr))*dt
+
+        #create original signal
+        s1 = np.zeros_like(t)
+        freqs = [1.0,25.0,90.0]
+        for f in freqs:
+            s1 += np.sin(2*np.pi*t*f)
+        s1 /= len(freqs)
+
+        #compare power spectrums
+        freq1,ps1 = self.power_spec(s1, sr)
+        freq2,ps2,ps2_std = mt_power_spectrum(s1, sr, 10.0, low_bias=True)
+        freq3,ps3,ps3_std = mt_power_spectrum(s1, sr, 10.0, low_bias=False)
+
+        plt.figure()
+        plt.plot(freq1, 20*np.log10(ps1), 'k-')
+        plt.plot(freq2, 20*np.log10(ps2), 'b-')
+        plt.plot(freq3, 20*np.log10(ps3), 'r-')
+        plt.legend(['Normal', 'MT (lowbias)', 'MT'])
+        plt.axis('tight')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Power (dB)')
         plt.show()
 
     def power_spec(self, s, sr):
