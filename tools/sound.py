@@ -117,7 +117,7 @@ class WavFile():
             plt.axis('tight')
 
 
-def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.jet):
+def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.jet, colorbar=True):
     if ax is None:
         ax = plt.gca()
 
@@ -135,6 +135,9 @@ def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, c
     else:
         ax.set_ylabel('Frequency (Hz)')
         ax.set_xlabel('Time (s)')
+
+    if colorbar:
+        plt.colorbar(iax)
 
 
 def play_sound(file_name):
