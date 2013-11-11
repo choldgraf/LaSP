@@ -152,7 +152,6 @@ class GaussianWindowSpectrumEstimator(PowerSpectrumEstimator):
 
 class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
 
-
     def __init__(self, bandwidth=None, adaptive=True, jackknife=False, low_bias=False):
         PowerSpectrumEstimator.__init__(self)
         self.adaptive = adaptive
@@ -307,3 +306,44 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
 
     t = np.arange(nwindows)*increment
     return t,freq,timefreq
+
+
+def power_spectrum(s, sr):
+    f = fft(s)
+    freq = fftfreq(len(s), d=1.0/sr)
+    findex = freq >= 0.0
+    return freq[findex],np.abs(f[findex])
+
+
+def mt_power_spectrum(s, sample_rate, window_size, low_bias=False):
+    """
+        Computes a jackknifed multi-taper power spectrum of a given signal. The jackknife is over
+        windowed segments of the signal, specified by window_size.
+    """
+
+    sample_length_bins = min(len(s), int(window_size * sample_rate))
+
+    #break signal into chunks and estimate coherence for each chunk
+    nchunks = int(np.floor(len(s) / float(sample_length_bins)))
+    nleft = len(s) % sample_length_bins
+    #ignore the last chunk if it's too short
+    if nleft > (sample_length_bins / 2.0):
+        nchunks += 1
+
+    ps_freq = None
+    ps_ests = list()
+    for k in range(nchunks):
+        si = k*sample_length_bins
+        ei = min(len(s), si + sample_length_bins)
+        print 'si=%d, ei=%d, len(s)=%d' % (si, ei, len(s))
+
+        ps_freq,mt_ps,var = ntalg.multi_taper_psd(s[si:ei], Fs=sample_rate, adaptive=True, jackknife=False,
+                                                  low_bias=low_bias, sides='onesided')
+        ps_ests.append(mt_ps)
+
+    ps_ests = np.array(ps_ests)
+
+    ps_mean = ps_ests.mean(axis=0)
+    ps_std = ps_ests.std(axis=0, ddof=1)
+
+    return ps_freq,ps_mean,ps_std
