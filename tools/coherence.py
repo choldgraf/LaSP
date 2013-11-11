@@ -110,7 +110,7 @@ class ModelCoherenceAnalyzer(object):
 
         psth_lens = np.array([len(pred) for pred in preds_by_stim])
 
-        self.spike_trails_by_stim = spike_trials_by_stim
+        self.spike_trials_by_stim = spike_trials_by_stim
         self.window_size = window_size
         self.bin_size = bin_size
         self.bandwidth = bandwidth
