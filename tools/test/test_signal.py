@@ -18,7 +18,6 @@ class TestSignals(unittest.TestCase):
     def tearDown(self):
         pass
 
-    """
     def test_cross_coherence(self):
 
         sr = 381.4697
@@ -44,24 +43,42 @@ class TestSignals(unittest.TestCase):
         winsize = 1.0
         inc = 0.100
         bw = 10.0
-        ct,cfreq,ctimefreq = cross_coherence(s1, s2, sr, window_size=winsize, increment=inc, bandwidth=bw)
+        ct,cfreq,ctimefreq,ctimefreq_floor = cross_coherence(s1, s2, sr, window_size=winsize, increment=inc, bandwidth=bw, noise_floor=True, num_noise_floor_samps=1)
+
+        df = cfreq[1] - cfreq[0]
+
+        #compute normal mutual information
+        #nmi = np.zeros([ctimefreq.shape[0]])
+        nmi = -df * np.log2(1.0 - ctimefreq).sum(axis=0)
+
+        #nmi_floor = np.zeros([ctimefreq_floor.shape[0]])
+        nmi_floor = -df * np.log2(1.0 - ctimefreq_floor).sum(axis=0)
 
         assert ctimefreq.shape[0] == len(cfreq)
         assert ctimefreq.shape[1] == len(ct)
 
+        #make plots
         plt.figure()
-        plt.subplot(2, 1, 1)
+        plt.subplot(3, 1, 1)
         plt.plot(t, s1, 'k-')
         plt.plot(t, s2, 'r-', alpha=0.60)
         plt.axis('tight')
         plt.legend(['s1', 's2'])
 
-        plt.subplot(2, 1, 2)
+        plt.subplot(3, 1, 2)
         plt.imshow(ctimefreq, interpolation='nearest', aspect='auto', extent=[ct.min(), ct.max(), cfreq.min(), cfreq.max()], cmap=cm.jet, origin='lower')
         plt.axis('tight')
         plt.colorbar()
+
+        plt.subplot(3, 1, 3)
+        plt.plot(ct, nmi, 'k-')
+        plt.plot(ct, nmi_floor, 'r-', alpha=0.60)
+        plt.axis('tight')
+        plt.legend(['NMI', 'Floor'])
+
         plt.show()
 
+    """
     def test_bandpass(self):
 
         sr = 381.4697
@@ -86,11 +103,11 @@ class TestSignals(unittest.TestCase):
         high_s = bandpass_filter(s1, sr, 13.0, 35.0)
         highhigh_s = highpass_filter(s1, sr, 35.0)
 
-        freq,ps = self.power_spec(s1, sr)
-        lowfreq,lowps = self.power_spec(low_s, sr)
-        medfreq,medps = self.power_spec(med_s, sr)
-        highfreq,highps = self.power_spec(high_s, sr)
-        highhighfreq,highhighps = self.power_spec(highhigh_s, sr)
+        freq,ps = power_spectrum(s1, sr)
+        lowfreq,lowps = power_spectrum(low_s, sr)
+        medfreq,medps = power_spectrum(med_s, sr)
+        highfreq,highps = power_spectrum(high_s, sr)
+        highhighfreq,highhighps = power_spectrum(highhigh_s, sr)
 
         #make plots
         plt.figure()
@@ -165,8 +182,6 @@ class TestSignals(unittest.TestCase):
         plt.ylabel('Power (dB)')
         plt.show()
 
-    """
-
     def test_match_power_spectrum(self):
 
         sr = 381.4697
@@ -180,11 +195,30 @@ class TestSignals(unittest.TestCase):
             s += np.sin(2*np.pi*t*f)
         s /= len(freqs)
 
-        snoise = match_power_spectrum(s, sr)
+        nsamps = 3
+        snoise = match_power_spectrum(s, sr, nsamps=nsamps)
+
+        ps_freq,ps = power_spectrum(s, sr)
+        for k in range(nsamps):
+            ps_freq_noise,ps_noise = power_spectrum(snoise[k, :], sr)
+            assert np.abs(ps - ps_noise).sum() < 1e-3
+
+        clrs = ['r-', 'b-', 'g-']
 
         plt.figure()
-        plt.plot(t, s, 'k-')
-        plt.plot(t, snoise, 'r-')
+        plt.plot(t, s, 'k-', linewidth=2.0)
+        for k in range(nsamps):
+            plt.plot(t, snoise[k, :], clrs[k])
         plt.axis('tight')
-        plt.legend(['Original', 'Noise'])
+
+        ps_freq,ps = power_spectrum(s, sr)
+        plt.figure()
+        plt.plot(ps_freq, ps, 'k-', linewidth=2.0)
+        for k in range(nsamps):
+            ps_freq_noise,ps_noise = power_spectrum(snoise[k, :], sr)
+            plt.plot(ps_freq_noise, ps_noise, clrs[k])
+        plt.axis('tight')
+
         plt.show()
+    """
+

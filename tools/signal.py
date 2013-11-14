@@ -246,10 +246,27 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
     return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
 
 
-def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0):
+def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0, noise_floor=False, num_noise_floor_samps=10):
     """
         Compute the running cross coherence between two time series.
+
+        s1,s2: the signals
+
+        sample_rate: sample rate in Hz for the signal
+
+        window_size: the size in seconds of the sliding window used to compute the coherence
+
+        increment: the amount of time in seconds to slide the window forward per time point
+
+        bandwidth: related to the number of tapers used to compute the cross spectral density
+
+        noise_floor: whether or not to compute a lower bound on the coherence for each time point. The lower bound
+            is defined by the average coherence between two signals that have the same power spectrum as s1 and s2
+            but randomly shuffled phases.
     """
+
+    isreal = (np.iscomplex(s1).sum() + np.iscomplex(s2)).sum() == 0
+
     assert len(s1) == len(s2)
 
     #compute lengths in # of samples
@@ -273,6 +290,8 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
 
     #construct the time-frequency representation for time-varying coherence
     timefreq = np.zeros([len(freq), nwindows])
+    if noise_floor:
+        timefreq_floor = np.zeros([len(freq), nwindows])
 
     #compute the coherence for each window
     #print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
@@ -304,8 +323,21 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         cdata = compute_coherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
         timefreq[:, k] = cdata.coherence
 
+        #compute the noise floor
+        if noise_floor:
+            win1_shuffled = match_power_spectrum(win1, sample_rate=sample_rate, nsamps=num_noise_floor_samps, isreal=isreal)
+            win2_shuffled = match_power_spectrum(win1, sample_rate=sample_rate, nsamps=num_noise_floor_samps, isreal=isreal)
+            cmean_sum = np.zeros([len(freq)])
+            for m in range(num_noise_floor_samps):
+                cdata = compute_coherence(win1_shuffled[m, :], win2_shuffled[m, :], sample_rate, window_size=window_size, bandwidth=bandwidth)
+                cmean_sum += cdata.coherence
+            timefreq_floor[:, k] = cmean_sum / num_noise_floor_samps
+
     t = np.arange(nwindows)*increment
-    return t,freq,timefreq
+    if noise_floor:
+        return t,freq,timefreq,timefreq_floor
+    else:
+        return t,freq,timefreq
 
 
 def power_spectrum(s, sr):
@@ -349,9 +381,10 @@ def mt_power_spectrum(s, sample_rate, window_size, low_bias=False):
     return ps_freq,ps_mean,ps_std
 
 
-def match_power_spectrum(s, sample_rate):
+def match_power_spectrum(s, sample_rate, nsamps=5, isreal=False):
     """
-        Create a signal that has the same power spectrum as s but with randomly shuffled phases.
+        Create a signals that have the same power spectrum as s but with randomly shuffled phases. nsamps is the number
+        of times the signal is permuted. Returns an nsamps X len(s) matrix.
     """
 
     #get FT of the signal
@@ -359,11 +392,14 @@ def match_power_spectrum(s, sample_rate):
     amplitude = np.abs(sfft)
     phase = np.angle(sfft)
 
-    #shuffle the phase
-    np.random.shuffle(phase)
+    s_recon = np.zeros([nsamps, len(s)], dtype='complex128')
+    for k in range(nsamps):
+        #shuffle the phase
+        np.random.shuffle(phase)
+        #reconstruct the signal
+        sfft_recon = amplitude*(np.cos(phase) + 1j*np.sin(phase))
+        s_recon[k, :] = ifft(sfft_recon)
 
-    #reconstruct the signal
-    sfft_recon = amplitude*(np.cos(phase) + complex(0, 1)*np.sin(phase))
-    s_recon = ifft(sfft_recon)
-
+    if isreal:
+        return np.real(s_recon)
     return s_recon
