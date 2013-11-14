@@ -127,7 +127,7 @@ class GaussianWindowSpectrumEstimator(PowerSpectrumEstimator):
         PowerSpectrumEstimator.__init__(self)
         self.nstd = nstd
 
-    def estimate(self, signal, sample_rate):
+    def estimate(self, signal, sample_rate, return_phase=False):
         nwinlen = len(signal)
         if nwinlen % 2 == 0:
             nwinlen += 1
@@ -144,6 +144,9 @@ class GaussianWindowSpectrumEstimator(PowerSpectrumEstimator):
         s_fft = fft(windowed_slice, n=fft_len, overwrite_x=1)
         freq = fftfreq(fft_len, d=1.0 / sample_rate)
 
+        if return_phase is True:
+            return freq, np.abs(s_fft), np.angle(s_fft)
+        
         return freq,np.abs(s_fft)
 
 
@@ -157,13 +160,13 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         if bandwidth is None:
             pass
 
-    def estimate(self, signal, sample_rate):
+    def estimate(self, signal, sample_rate, return_phase=False):
         mt_freqs,mt_ps,var = ntalg.multi_taper_psd(signal, Fs=sample_rate, adaptive=self.adaptive, jackknife=self.jackknife,
                                                    low_bias=self.low_bias, sides='onesided')
         return mt_freqs,mt_ps
 
 
-def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=0, max_freq=None):
+def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=0, max_freq=None, return_phase=False):
     """
         Compute the spectrogram of a signal s.
 
@@ -207,24 +210,35 @@ def stft(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=
 
     #take the FFT of each segment, padding with zeros when necessary to keep window length the same
     timefreq = np.zeros([nfreq, nwindows], dtype='float')
+    if return_phase is True:
+        timefreq_phase = np.zeros([nfreq, nwindows], dtype='float')
     rms = np.zeros([nwindows])
     for k in range(nwindows):
         center = k*nincrement + hnwinlen
         si = center - hnwinlen
         ei = center + hnwinlen + 1
         rms[k] = zs[si:ei].std(ddof=1)
-        ps_freq,ps = spectrum_estimator.estimate(zs[si:ei], sample_rate)
-        findex = (ps_freq <= max_freq) & (ps_freq >= min_freq)
-        timefreq[:, k] = ps[findex]
+        if return_phase is True:
+            ps_freq, ps, ps_phase = spectrum_estimator.estimate(zs[si:ei], sample_rate, return_phase=return_phase)
+            findex = (ps_freq <= max_freq) & (ps_freq >= min_freq)
+            timefreq[:, k] = ps[findex]
+            timefreq_phase[:, k] = ps_phase[findex]
+        else:
+            ps_freq,ps = spectrum_estimator.estimate(zs[si:ei], sample_rate, return_phase=return_phase)
+            findex = (ps_freq <= max_freq) & (ps_freq >= min_freq)
+            timefreq[:, k] = ps[findex]
 
     t = np.arange(0, nwindows, 1.0) * increment
 
+    if return_phase is True:
+        return t, freq, timefreq, timefreq_phase, rms
+    
     return t,freq,timefreq,rms
 
 
-def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6):
+def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6, return_phase=False):
     spectrum_estimator = GaussianWindowSpectrumEstimator(nstd=nstd)
-    return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
+    return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq, return_phase=return_phase)
 
 
 def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0, max_freq=None, adaptive=True, jackknife=False, low_bias=False):
