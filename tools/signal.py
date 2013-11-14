@@ -2,7 +2,7 @@ from abc import ABCMeta,abstractmethod
 
 import numpy as np
 
-from scipy.fftpack import fft,fftfreq
+from scipy.fftpack import fft,fftfreq,ifft
 from scipy.signal import lfilter, filter_design, resample,filtfilt
 
 import nitime.algorithms as ntalg
@@ -333,3 +333,23 @@ def mt_power_spectrum(s, sample_rate, window_size, low_bias=False):
     ps_std = ps_ests.std(axis=0, ddof=1)
 
     return ps_freq,ps_mean,ps_std
+
+
+def match_power_spectrum(s, sample_rate):
+    """
+        Create a signal that has the same power spectrum as s but with randomly shuffled phases.
+    """
+
+    #get FT of the signal
+    sfft = fft(s)
+    amplitude = np.abs(sfft)
+    phase = np.angle(sfft)
+
+    #shuffle the phase
+    np.random.shuffle(phase)
+
+    #reconstruct the signal
+    sfft_recon = amplitude*(np.cos(phase) + complex(0, 1)*np.sin(phase))
+    s_recon = ifft(sfft_recon)
+
+    return s_recon

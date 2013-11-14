@@ -7,7 +7,7 @@ from matplotlib import cm
 
 import matplotlib.pyplot as plt
 
-from tools.signal import cross_coherence,bandpass_filter,lowpass_filter,highpass_filter, mt_power_spectrum
+from tools.signal import cross_coherence,bandpass_filter,lowpass_filter,highpass_filter, mt_power_spectrum, power_spectrum,match_power_spectrum
 
 
 class TestSignals(unittest.TestCase):
@@ -135,7 +135,6 @@ class TestSignals(unittest.TestCase):
         plt.plot(highhighfreq, highhighps, 'k-')
         plt.axis('tight')
         plt.show()
-    """
 
     def test_power_spec(self):
         sr = 381.4697
@@ -152,7 +151,7 @@ class TestSignals(unittest.TestCase):
         s1 /= len(freqs)
 
         #compare power spectrums
-        freq1,ps1 = self.power_spec(s1, sr)
+        freq1,ps1 = power_spectrum(s1, sr)
         freq2,ps2,ps2_std = mt_power_spectrum(s1, sr, 10.0, low_bias=True)
         freq3,ps3,ps3_std = mt_power_spectrum(s1, sr, 10.0, low_bias=False)
 
@@ -166,8 +165,26 @@ class TestSignals(unittest.TestCase):
         plt.ylabel('Power (dB)')
         plt.show()
 
-    def power_spec(self, s, sr):
-        f = fft(s)
-        freq = fftfreq(len(s), d=1.0/sr)
-        findex = freq >= 0.0
-        return freq[findex],np.abs(f[findex])
+    """
+
+    def test_match_power_spectrum(self):
+
+        sr = 381.4697
+        dt = 1.0 / sr
+        duration = 1.0 + dt
+
+        freqs = [25.0, 67.0, 89.0, 111.0]
+        t = np.arange(0, int(duration*sr))*dt
+        s = np.zeros_like(t)
+        for f in freqs:
+            s += np.sin(2*np.pi*t*f)
+        s /= len(freqs)
+
+        snoise = match_power_spectrum(s, sr)
+
+        plt.figure()
+        plt.plot(t, s, 'k-')
+        plt.plot(t, snoise, 'r-')
+        plt.axis('tight')
+        plt.legend(['Original', 'Noise'])
+        plt.show()
