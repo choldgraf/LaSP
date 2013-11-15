@@ -6,6 +6,7 @@ from scipy.fftpack import fft,fftfreq,ifft
 from scipy.signal import lfilter, filter_design, resample,filtfilt
 
 import nitime.algorithms as ntalg
+import time
 from tools.coherence import compute_coherence
 
 
@@ -246,7 +247,7 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
     return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
 
 
-def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0, noise_floor=False, num_noise_trials=1):
+def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0, noise_floor=False, num_noise_trials=1, debug=False):
     """
         Compute the running cross coherence between two time series.
 
@@ -264,8 +265,6 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
             is defined by the average coherence between two signals that have the same power spectrum as s1 and s2
             but randomly shuffled phases.
     """
-
-    isreal = (np.iscomplex(s1).sum() + np.iscomplex(s2)).sum() == 0
 
     assert len(s1) == len(s2)
 
@@ -293,12 +292,18 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
     if noise_floor:
         floor_window_index_min = int(np.ceil(hnwinlen / float(nincrement)))
         floor_window_index_max = nwindows - floor_window_index_min
-        print 'floor_window_index_min=%d, max=%d' % (floor_window_index_min, floor_window_index_max)
         timefreq_floor = np.zeros([len(freq), nwindows])
+
+    if debug:
+        print '[cross_coherence] length=%0.3f, slen=%d, window_size=%0.3f, increment=%0.3f, bandwidth=%0.1f, nwindows=%d' % \
+              (slen/sample_rate, slen, window_size, increment, bandwidth, nwindows)
 
     #compute the coherence for each window
     #print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
     for k in range(nwindows):
+        if debug:
+            stime = time.time()
+
         #get the indices of the window within the signals
         center = k*nincrement
         si = center - hnwinlen
@@ -325,6 +330,11 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         #compute the coherence
         cdata = compute_coherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
         timefreq[:, k] = cdata.coherence
+        if debug:
+            total_time = 0.0
+            etime = time.time() - stime
+            total_time += etime
+            print '\twindow %d: time = %0.2fs' % (k, etime)
 
         #compute the noise floor
         if noise_floor:
@@ -332,6 +342,9 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
             csum = np.zeros([len(cdata.coherence)])
 
             for m in range(num_noise_trials):
+                if debug:
+                    stime = time.time()
+
                 #compute coherence between win1 and randomly selected slice of s2
                 win2_shift_index = k
                 while win2_shift_index == k or win2_shift_index < floor_window_index_min or win2_shift_index > floor_window_index_max:
@@ -358,7 +371,16 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
                 cdata2 = compute_coherence(win2, win1_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
                 csum += cdata2.coherence
 
+                if debug:
+                    etime = time.time() - stime
+                    total_time += etime
+                    print '\t\tnoise trial %d: time = %0.2fs' % (m, etime)
+
             timefreq_floor[:, k] = csum / (2*num_noise_trials)
+
+        if debug:
+            print '\tTotal time for window %d: %0.2fs' % (k, total_time)
+            print '\tExpected total time for all iterations: %0.2f min' % (total_time*nwindows / 60.0)
 
     t = np.arange(nwindows)*increment
     if noise_floor:

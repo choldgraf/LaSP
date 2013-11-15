@@ -372,7 +372,8 @@ def compute_coherence_original(s1, s2, sample_rate, bandwidth, jackknife=False, 
 
     return cdata
 
-def compute_coherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_len_percentage_tolerance=0.30, frequency_cutoff=None, tanh_transform=False):
+def compute_coherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_len_percentage_tolerance=0.30,
+                      frequency_cutoff=None, tanh_transform=False, debug=False):
     """
         Computing the coherence between signals s1 and s2. To do so, the signals are broken up into segments of length
         specified by window_size. Then the multi-taper coherence is computed between each segment. The mean coherence
@@ -405,6 +406,8 @@ def compute_coherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_le
     K = 2*NW - 1
     #print 'compute_coherence: NW=%d, K=%d' % (NW, K)
     tapers,eigs = ntalg.dpss_windows(sample_length_bins, NW, K)
+    if debug:
+        print '[compute_coherence] bandwidth=%0.1f, # of tapers: %d' % (bandwidth, len(eigs))
 
     #break signal into chunks and estimate coherence for each chunk
     nchunks = int(np.floor(len(s1) / float(sample_length_bins)))
