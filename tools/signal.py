@@ -246,7 +246,7 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
     return stft(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
 
 
-def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0, noise_floor=False, num_noise_floor_samps=10):
+def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0, noise_floor=False, num_noise_trials=1):
     """
         Compute the running cross coherence between two time series.
 
@@ -291,6 +291,9 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
     #construct the time-frequency representation for time-varying coherence
     timefreq = np.zeros([len(freq), nwindows])
     if noise_floor:
+        floor_window_index_min = int(np.ceil(hnwinlen / float(nincrement)))
+        floor_window_index_max = nwindows - floor_window_index_min
+        print 'floor_window_index_min=%d, max=%d' % (floor_window_index_min, floor_window_index_max)
         timefreq_floor = np.zeros([len(freq), nwindows])
 
     #compute the coherence for each window
@@ -325,13 +328,37 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
 
         #compute the noise floor
         if noise_floor:
-            win1_shuffled = match_power_spectrum(win1, sample_rate=sample_rate, nsamps=num_noise_floor_samps, isreal=isreal)
-            win2_shuffled = match_power_spectrum(win1, sample_rate=sample_rate, nsamps=num_noise_floor_samps, isreal=isreal)
-            cmean_sum = np.zeros([len(freq)])
-            for m in range(num_noise_floor_samps):
-                cdata = compute_coherence(win1_shuffled[m, :], win2_shuffled[m, :], sample_rate, window_size=window_size, bandwidth=bandwidth)
-                cmean_sum += cdata.coherence
-            timefreq_floor[:, k] = cmean_sum / num_noise_floor_samps
+
+            csum = np.zeros([len(cdata.coherence)])
+
+            for m in range(num_noise_trials):
+                #compute coherence between win1 and randomly selected slice of s2
+                win2_shift_index = k
+                while win2_shift_index == k or win2_shift_index < floor_window_index_min or win2_shift_index > floor_window_index_max:
+                    win2_shift_index = np.random.randint(nwindows)
+                w2center = win2_shift_index*nincrement
+                w2si = w2center - hnwinlen
+                w2ei = w2center + hnwinlen + 1
+                win2_shift = s2[w2si:w2ei]
+                #print 'len(s2)=%d, win2_shift_index=%d, w2si=%d, w2ei=%d, len(win1)=%d, len(win2_shift)=%d' % \
+                #      (len(s2), win2_shift_index, w2si, w2ei, len(win1), len(win2_shift))
+                cdata1 = compute_coherence(win1, win2_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
+                csum += cdata1.coherence
+
+                #compute coherence between win2 and randomly selected slice of s1
+                win1_shift_index = k
+                while win1_shift_index == k or win1_shift_index < floor_window_index_min or win1_shift_index > floor_window_index_max:
+                    win1_shift_index = np.random.randint(nwindows)
+                w1center = win1_shift_index*nincrement
+                w1si = w1center - hnwinlen
+                w1ei = w1center + hnwinlen + 1
+                win1_shift = s1[w1si:w1ei]
+                #print 'nwindows=%d, len(s1)=%d, win1_shift_index=%d, w1si=%d, w1ei=%d, len(win2)=%d, len(win1_shift)=%d' % \
+                #      (nwindows, len(s1), win1_shift_index, w1si, w1ei, len(win2), len(win1_shift))
+                cdata2 = compute_coherence(win2, win1_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
+                csum += cdata2.coherence
+
+            timefreq_floor[:, k] = csum / (2*num_noise_trials)
 
     t = np.arange(nwindows)*increment
     if noise_floor:

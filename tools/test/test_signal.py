@@ -20,6 +20,7 @@ class TestSignals(unittest.TestCase):
 
     def test_cross_coherence(self):
 
+        np.random.seed(12345)
         sr = 381.4697
         dt = 1.0 / sr
         duration = 20.0 + dt
@@ -41,9 +42,9 @@ class TestSignals(unittest.TestCase):
 
         #compute the cross coherence
         winsize = 1.0
-        inc = 0.100
-        bw = 10.0
-        ct,cfreq,ctimefreq,ctimefreq_floor = cross_coherence(s1, s2, sr, window_size=winsize, increment=inc, bandwidth=bw, noise_floor=True, num_noise_floor_samps=1)
+        inc = 0.500
+        bw = 5.0
+        ct,cfreq,ctimefreq,ctimefreq_floor = cross_coherence(s1, s2, sr, window_size=winsize, increment=inc, bandwidth=bw, noise_floor=True, num_noise_trials=5)
 
         df = cfreq[1] - cfreq[0]
 
