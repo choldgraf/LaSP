@@ -19,12 +19,20 @@ class PowerSpectrumEstimator(object):
     def estimate(self, signal, sample_rate):
         return NotImplementedError('Use a subclass of PowerSpectrumEstimator!')
 
+    @abstractmethod
+    def get_frequencies(self, signal_length, sample_rate):
+        return NotImplementedError('Use a subclass of PowerSpectrumEstimator!')
 
 class GaussianSpectrumEstimator(PowerSpectrumEstimator):
 
     def __init__(self, nstd=6):
         PowerSpectrumEstimator.__init__(self)
         self.nstd = nstd
+
+    def get_frequencies(self, signal_length, sample_rate):
+        freq = fftfreq(signal_length, d=1.0/sample_rate)
+        nz = freq >= 0.0
+        return freq[nz]
 
     def estimate(self, signal, sample_rate):
         nwinlen = len(signal)
@@ -56,6 +64,11 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         self.adaptive = adaptive
         self.max_adaptive_iter = max_adaptive_iter
 
+    def get_frequencies(self, signal_length, sample_rate):
+        cspec_freq = fftfreq(signal_length, d=1.0/sample_rate)
+        nz = cspec_freq >= 0.0
+        return cspec_freq[nz]
+
     def estimate(self, signal, sample_rate, debug=True):
 
         slen = len(signal)
@@ -76,11 +89,12 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         s_fft = fft(s_tap, axis=1)
 
         #determine the weights used to combine the tapered signals
-        if self.adaptive:
+        if self.adaptive and ntapers > 1:
             #compute the adaptive weights
             weights,weights_dof = ntutils.adaptive_weights(s_fft, eigs, sides='onesided', max_iter=self.max_adaptive_iter)
         else:
-            weights = np.ones(ntapers) / float(ntapers)
+            weights = np.ones([ntapers, slen]) / float(ntapers)
+        print 'weights.shape=',weights.shape
 
         #throw away negative frequencies of the spectrum
         cspec_freq = fftfreq(slen, d=1.0/sample_rate)
@@ -98,13 +112,13 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
                 index = range(ntapers)
                 del index[k]
                 #compute an estimate of the spectrum using all but the kth weight
-                cspec_est = np.squeeze(np.dot(s_fft[index, :].T, weights[index]) / weights[index].sum())
+                cspec_est = (s_fft[index, :] * weights[index, :]) / weights[index, :].sum()
                 cspec_diff = cspec_est - cspec_mean
                 #do an online update of the mean spectrum
                 cspec_mean += cspec_diff / (k+1)
         else:
             #compute the average complex spectrum weighted across tapers
-            cspec_mean = np.squeeze(np.dot(s_fft.T, weights) / weights.sum())
+            cspec_mean = (s_fft * weights) / weights.sum()
 
         return cspec_freq,cspec_mean
 
@@ -145,7 +159,7 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
     zs[hnwinlen:-hnwinlen] = s
 
     #get the values for the frequency axis by estimating the spectrum of a dummy slice
-    full_freq,est = spectrum_estimator.estimate(np.zeros([2*hnwinlen+1]), sample_rate)
+    full_freq = spectrum_estimator.get_frequencies(nwinlen, sample_rate)
     freq_index = (full_freq >= min_freq) & (full_freq <= max_freq)
     freq = full_freq[freq_index]
     nfreq = freq_index.sum()
@@ -170,7 +184,6 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
     t = np.arange(0, nwindows, 1.0) * increment
 
     return t, freq, tf
-
 
 
 def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6, return_phase=False):
