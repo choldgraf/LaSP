@@ -5,6 +5,8 @@ import numpy as np
 
 from scipy.fftpack import fft,fftfreq
 
+import matplotlib.pyplot as plt
+
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
 
@@ -57,7 +59,7 @@ class GaussianSpectrumEstimator(PowerSpectrumEstimator):
 
 class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
 
-    def __init__(self, bandwidth, adaptive=True, jackknife=False, max_adaptive_iter=150):
+    def __init__(self, bandwidth, adaptive=False, jackknife=False, max_adaptive_iter=150):
         PowerSpectrumEstimator.__init__(self)
         self.bandwidth = bandwidth
         self.jackknife = jackknife
@@ -69,18 +71,18 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         nz = cspec_freq >= 0.0
         return cspec_freq[nz]
 
-    def estimate(self, signal, sample_rate, debug=True):
+    def estimate(self, signal, sample_rate, debug=False):
 
         slen = len(signal)
 
         #compute DPSS tapers for signals
         NW = max(1, int((slen / sample_rate)*self.bandwidth))
         K = 2*NW - 1
-        print 'compute_coherence: slen=%d, NW=%d, K=%d' % (slen, NW, K)
+
         tapers,eigs = ntalg.dpss_windows(slen, NW, K)
         ntapers = len(tapers)
         if debug:
-            print '[MultiTaperSpectrumEstimator.estimate] bandwidth=%0.1f, # of tapers: %d' % (self.bandwidth, len(eigs))
+            print '[MultiTaperSpectrumEstimator.estimate] slen=%d, NW=%d, K=%d, bandwidth=%0.1f, ntapers: %d' % (slen, NW, K, self.bandwidth, ntapers)
 
         #compute a set of tapered signals
         s_tap = tapers * signal
@@ -88,22 +90,27 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         #compute the FFT of each tapered signal
         s_fft = fft(s_tap, axis=1)
 
-        #determine the weights used to combine the tapered signals
-        if self.adaptive and ntapers > 1:
-            #compute the adaptive weights
-            weights,weights_dof = ntutils.adaptive_weights(s_fft, eigs, sides='onesided', max_iter=self.max_adaptive_iter)
-        else:
-            weights = np.ones([ntapers, slen]) / float(ntapers)
-        print 'weights.shape=',weights.shape
-
         #throw away negative frequencies of the spectrum
         cspec_freq = fftfreq(slen, d=1.0/sample_rate)
         nz = cspec_freq >= 0.0
         s_fft = s_fft[:, nz]
         flen = nz.sum()
         cspec_freq = cspec_freq[nz]
-        print '(1)cspec_freq.shape=',cspec_freq.shape
-        print '(1)s_fft.shape=',s_fft.shape
+        #print '(1)cspec_freq.shape=',cspec_freq.shape
+        #print '(1)s_fft.shape=',s_fft.shape
+
+        #determine the weights used to combine the tapered signals
+        if self.adaptive and ntapers > 1:
+            #compute the adaptive weights
+            weights,weights_dof = ntutils.adaptive_weights(s_fft, eigs, sides='twosided', max_iter=self.max_adaptive_iter)
+        else:
+            weights = np.ones([ntapers, flen]) / float(ntapers)
+
+        #print '(1)weights.shape=',weights.shape
+
+        def make_spectrum(signal, signal_weights):
+            denom = (signal_weights**2).sum(axis=0)
+            return (np.abs(signal * signal_weights)**2).sum(axis=0) / denom
 
         if self.jackknife:
             #do leave-one-out cross validation to estimate the complex mean and standard deviation of the spectrum
@@ -112,15 +119,15 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
                 index = range(ntapers)
                 del index[k]
                 #compute an estimate of the spectrum using all but the kth weight
-                cspec_est = (s_fft[index, :] * weights[index, :]) / weights[index, :].sum()
+                cspec_est = make_spectrum(s_fft[index, :], weights[index, :])
                 cspec_diff = cspec_est - cspec_mean
                 #do an online update of the mean spectrum
                 cspec_mean += cspec_diff / (k+1)
         else:
             #compute the average complex spectrum weighted across tapers
-            cspec_mean = (s_fft * weights) / weights.sum()
+            cspec_mean = make_spectrum(s_fft, weights)
 
-        return cspec_freq,cspec_mean
+        return cspec_freq,cspec_mean.squeeze()
 
 
 def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=0, max_freq=None):
@@ -174,11 +181,11 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
 
         spec_freq,est = spectrum_estimator.estimate(zs[si:ei], sample_rate)
         findex = (spec_freq <= max_freq) & (spec_freq >= min_freq)
-        print 'k=%d' % k
-        print 'si=%d, ei=%d' % (si, ei)
-        print 'spec_freq.shape=',spec_freq.shape
-        print 'tf.shape=',tf.shape
-        print 'est.shape=',est.shape
+        #print 'k=%d' % k
+        #print 'si=%d, ei=%d' % (si, ei)
+        #print 'spec_freq.shape=',spec_freq.shape
+        #print 'tf.shape=',tf.shape
+        #print 'est.shape=',est.shape
         tf[:, k] = est[findex]
 
     t = np.arange(0, nwindows, 1.0) * increment
@@ -186,11 +193,144 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
     return t, freq, tf
 
 
-def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6, return_phase=False):
+def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6):
     spectrum_estimator = GaussianSpectrumEstimator(nstd=nstd)
     return timefreq(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
 
 
 def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0, max_freq=None, adaptive=True, jackknife=False):
-    spectrum_estimator = MultiTaperSpectrumEstimator(bandwidth=bandwidth, adaptive=True, jackknife=False, low_bias=False)
+    spectrum_estimator = MultiTaperSpectrumEstimator(bandwidth=bandwidth, adaptive=adaptive, jackknife=jackknife)
     return timefreq(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
+
+
+class TimeFrequencyReassignment(object):
+
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def reassign(self, spec_t, spec_freq, spec):
+        raise NotImplementedError('Use a subclass!')
+
+
+class AmplitudeReassignment(object):
+    """
+        NOTE: doesn't work...
+    """
+
+    def __init__(self):
+        pass
+
+    def reassign(self, spec_t, spec_f, spec):
+
+        #get power spectrum
+        ps = np.abs(spec)
+
+        #take the spectral and temporal derivatives
+        dt = spec_t[1] - spec_t[0]
+        df = spec_f[1] - spec_f[0]
+        ps_df,ps_dt = np.gradient(ps)
+        ps_df /= df
+        ps_dt /= dt
+
+        plt.figure()
+        plt.subplot(2, 1, 1)
+        plt.hist(ps_df.ravel(), bins=15)
+        plt.title('ps_df')
+        plt.axis('tight')
+        plt.subplot(2, 1, 2)
+        plt.hist(ps_dt.ravel(), bins=15)
+        plt.title('ps_dt')
+        plt.axis('tight')
+
+        #construct the empty reassigned time frequency representation
+        ps_r = np.zeros_like(ps)
+        for k,freq in enumerate(spec_f):
+            for j,t in enumerate(spec_t):
+                inst_freq = ps_df[k, j]
+                group_delay = ps_dt[k, j]
+                print 'inst_freq=%0.6f, group_delay=%0.6f' % (inst_freq, group_delay)
+                fnew = freq + inst_freq
+                tnew = group_delay + t
+                print 'fnew=%0.0f, tnew=%0.0f' % (fnew, tnew)
+                row = np.array(np.nonzero(spec_f <= fnew)).max()
+                col = np.array(np.nonzero(spec_t <= tnew)).max()
+                print 'row=',row
+                print 'col=',col
+                ps_r[row, col] += 1.0
+
+        ps_r /= len(spec_t)*len(spec_f)
+
+        return ps_r
+
+
+class PhaseReassignment(object):
+    """
+        NOTE: doesn't work...
+    """
+
+    def __init__(self):
+        pass
+
+    def reassign(self, spec_t, spec_f, spec):
+
+        #get phase
+        phase = np.angle(spec)
+
+        #take the spectral and temporal derivatives
+        dt = spec_t[1] - spec_t[0]
+        df = spec_f[1] - spec_f[0]
+        ps_df,ps_dt = np.gradient(phase)
+        ps_df /= df
+        ps_dt /= dt
+
+        plt.figure()
+        plt.subplot(2, 1, 1)
+        plt.hist(ps_df.ravel(), bins=15)
+        plt.title('ps_df')
+        plt.axis('tight')
+        plt.subplot(2, 1, 2)
+        plt.hist(ps_dt.ravel(), bins=15)
+        plt.title('ps_dt')
+        plt.axis('tight')
+
+        #construct the empty reassigned time frequency representation
+        ps_r = np.zeros_like(phase)
+
+        for k,freq in enumerate(spec_f):
+            for j,t in enumerate(spec_t):
+                tnew = max(0, t - (ps_df[k, j] / (2*np.pi)))
+                fnew = max(0, ps_dt[k, j] / (2*np.pi))
+                print 'fnew=%0.0f, tnew=%0.0f' % (fnew, tnew)
+                row = np.array(np.nonzero(spec_f <= fnew)).max()
+                col = np.array(np.nonzero(spec_t <= tnew)).max()
+                print 'row=',row
+                print 'col=',col
+                ps_r[row, col] += 1.0
+
+        ps_r /= len(spec_t)*len(spec_f)
+
+        return ps_r
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
