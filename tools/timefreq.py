@@ -195,7 +195,10 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
 
 def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6):
     spectrum_estimator = GaussianSpectrumEstimator(nstd=nstd)
-    return timefreq(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
+    t,freq,tf = timefreq(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
+    ps = np.abs(tf)
+    rms = ps.sum(axis=0)
+    return t,freq,tf,rms
 
 
 def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0, max_freq=None, adaptive=True, jackknife=False):

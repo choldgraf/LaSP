@@ -51,7 +51,6 @@ class TestTimeFreq(unittest.TestCase):
                 freq,spec = mt_est.estimate(s, sr, debug=True)
                 freq_a,spec_a = mt_est_a.estimate(s, sr, debug=True)
 
-
                 plt.subplot(len(win_sizes), len(bws), nsp)
                 plt.plot(freq, spec, 'k-', linewidth=2.0)
                 plt.plot(freq_a, spec_a, 'r-', linewidth=2.0)
