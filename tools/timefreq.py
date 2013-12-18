@@ -3,12 +3,14 @@ import copy
 
 import numpy as np
 
-from scipy.fftpack import fft,fftfreq
+from scipy.fftpack import fft,fftfreq, hilbert
+from scipy.interpolate import RectBivariateSpline
 
 import matplotlib.pyplot as plt
 
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
+from tools.signal import lowpass_filter, bandpass_filter
 
 
 class PowerSpectrumEstimator(object):
@@ -316,7 +318,62 @@ class PhaseReassignment(object):
         return ps_r
 
 
+def postprocess_spectrogram(spec, thresh_percentile=10.0):
+        """
+            Compute the log spectrogram and threshold any pixels that are below the percentile given by thresh_percentile.
+        """
+        lspec = np.zeros_like(spec)
+        nz = spec > 0.0
+        lspec[nz] = 20*np.log10(spec[nz])
+        thresh = np.percentile(lspec.ravel(), thresh_percentile)
+        lspec[lspec < thresh] = thresh
+        return lspec
 
+
+def bandpass_timefreq(s, frequencies, sample_rate):
+    """
+        Bandpass filter signal s at the given frequency bands, and then use the Hilber transform
+        to produce a complex-valued time-frequency representation of the bandpass filtered signal.
+    """
+
+    freqs = sorted(frequencies)
+    tf_raw = np.zeros([len(frequencies), len(s)], dtype='float')
+    tf_freqs = list()
+
+    for k,f in enumerate(freqs):
+        #bandpass filter signal
+        if k == 0:
+            tf_raw[k, :] = lowpass_filter(s, sample_rate, f)
+            tf_freqs.append( (0.0, f) )
+        else:
+            tf_raw[k, :] = bandpass_filter(s, sample_rate,  freqs[k-1], f)
+            tf_freqs.append( (freqs[k-1], f) )
+
+    #compute analytic signal
+    tf = hilbert(tf_raw, axis=1)
+    #print 'tf_raw.shape=',tf_raw.shape
+    #print 'tf.shape=',tf.shape
+
+    return np.array(tf_freqs),tf_raw,tf
+
+
+def resample_spectrogram(t, freq, spec, dt_new, df_new):
+
+    #print 'len(t)=%d, len(freq)=%d, spec.shape=(%d, %d)' % (len(t), len(freq), spec.shape[0], spec.shape[1])
+    spline = RectBivariateSpline(freq, t, spec)
+
+    ntnew = int(np.ceil((t.max() - t.min()) / dt_new))
+    nfnew = int(np.ceil((freq.max() - freq.min()) / df_new))
+
+    tnew = np.arange(ntnew)*dt_new
+    fnew = np.arange(nfnew)*df_new
+
+    new_spec = np.zeros([nfnew, ntnew])
+    for k,tval in enumerate(tnew):
+        for j,fval in enumerate(fnew):
+            new_spec[j, k] = spline(fval, tval)
+
+    return tnew,fnew,new_spec
 
 
 
