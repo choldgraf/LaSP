@@ -3,7 +3,8 @@ import copy
 
 import numpy as np
 
-from scipy.fftpack import fft,fftfreq, hilbert
+from scipy.fftpack import fft,fftfreq
+from scipy.signal import hilbert
 from scipy.interpolate import RectBivariateSpline
 
 import matplotlib.pyplot as plt
@@ -26,6 +27,7 @@ class PowerSpectrumEstimator(object):
     @abstractmethod
     def get_frequencies(self, signal_length, sample_rate):
         return NotImplementedError('Use a subclass of PowerSpectrumEstimator!')
+
 
 class GaussianSpectrumEstimator(PowerSpectrumEstimator):
 
@@ -376,21 +378,56 @@ def resample_spectrogram(t, freq, spec, dt_new, df_new):
     return tnew,fnew,new_spec
 
 
+def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq_bands=100,
+                             spec_estimator=GaussianSpectrumEstimator(nstd=6), mask=False, mask_gain=3.0):
+    """
+        Compute a spectrogram for each time window, and average across time windows to get better time-frequency
+        resolution. Post-processing is done with applying the log to change the power spectrum to decibels, and
+        then a hard threshold is applied to zero-out the lowest 10% of the pixels.
+    """
 
+    #compute spectrograms
+    timefreqs = list()
+    for k,win_size in enumerate(win_sizes):
+        if increment is None:
+            inc = win_sizes[0] / 2
+        else:
+            inc = increment
+        t,freq,tf = timefreq(s, sample_rate, win_size, inc, spec_estimator)
+        ps = np.abs(tf)
+        ps_log = postprocess_spectrogram(ps)
+        timefreqs.append( (t, freq, ps_log) )
 
+    #compute the mean spectrogram across window sizes
+    nyquist_freq = sample_rate / 2.0
+    df = nyquist_freq / num_freq_bands
+    f_smallest = np.arange(num_freq_bands)*df
+    t_smallest = timefreqs[0][0]  # best temporal resolution
+    df_smallest = f_smallest[1] - f_smallest[0]
+    dt_smallest = t_smallest[1] - t_smallest[0]
 
+    #resample the spectrograms so they all have the same frequency spacing
+    rs_specs = list()
+    for t,freq,ps in timefreqs:
+        rs_t,rs_freq,rs_ps = resample_spectrogram(t, freq, ps, dt_smallest, df_smallest)
+        rs_specs.append(rs_ps)
+    #get the shortest spectrogram length
+    min_freq_len = np.min([rs_ps.shape[0] for rs_ps in rs_specs])
+    min_t_len = np.min([rs_ps.shape[1] for rs_ps in rs_specs])
+    rs_specs_arr = np.array([rs_ps[:min_freq_len, :min_t_len] for rs_ps in rs_specs])
 
+    #compute mean, std, and zscored power spectrum across window sizes
+    tf_mean = rs_specs_arr.mean(axis=0)
 
+    if mask:
+        #compute the standard deviation across window sizes
+        tf_std = rs_specs_arr.std(axis=0, ddof=1)
+        #compute something that is close to the maximum std. we use the 95th pecentile to avoid outliers
+        tf_std /= np.percentile(tf_std.ravel(), 95)
+        #compute a sigmoidal mask that will zero out pixels in tf_mean that have high standard deviations
+        sigmoid = lambda x: 1.0 / (1.0 + np.exp(1)**(-mask_gain*x))
+        sigmoid_mask = 1.0 - sigmoid(tf_std)
+        #mask the mean time frequency representation
+        tf_mean *= sigmoid_mask
 
-
-
-
-
-
-
-
-
-
-
-
-
+    return t_smallest, f_smallest, tf_mean
