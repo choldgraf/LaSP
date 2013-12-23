@@ -1,3 +1,5 @@
+import time
+
 from abc import ABCMeta,abstractmethod
 import copy
 
@@ -370,10 +372,7 @@ def resample_spectrogram(t, freq, spec, dt_new, df_new):
     tnew = np.arange(ntnew)*dt_new
     fnew = np.arange(nfnew)*df_new
 
-    new_spec = np.zeros([nfnew, ntnew])
-    for k,tval in enumerate(tnew):
-        for j,fval in enumerate(fnew):
-            new_spec[j, k] = spline(fval, tval)
+    new_spec = spline(fnew, tnew)
 
     return tnew,fnew,new_spec
 
@@ -387,6 +386,7 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
     """
 
     #compute spectrograms
+    stime = time.time()
     timefreqs = list()
     for k,win_size in enumerate(win_sizes):
         if increment is None:
@@ -397,6 +397,8 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
         ps = np.abs(tf)
         ps_log = postprocess_spectrogram(ps)
         timefreqs.append( (t, freq, ps_log) )
+    etime = time.time() - stime
+    print 'time to compute %d spectrograms: %0.6fs' % (len(win_sizes), etime)
 
     #compute the mean spectrogram across window sizes
     nyquist_freq = sample_rate / 2.0
@@ -407,14 +409,20 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
     dt_smallest = t_smallest[1] - t_smallest[0]
 
     #resample the spectrograms so they all have the same frequency spacing
+    stime = time.time()
     rs_specs = list()
     for t,freq,ps in timefreqs:
         rs_t,rs_freq,rs_ps = resample_spectrogram(t, freq, ps, dt_smallest, df_smallest)
         rs_specs.append(rs_ps)
+    etime = time.time() - stime
+    print 'time to resample %d spectrograms: %0.6fs' % (len(win_sizes), etime)
+
     #get the shortest spectrogram length
     min_freq_len = np.min([rs_ps.shape[0] for rs_ps in rs_specs])
     min_t_len = np.min([rs_ps.shape[1] for rs_ps in rs_specs])
     rs_specs_arr = np.array([rs_ps[:min_freq_len, :min_t_len] for rs_ps in rs_specs])
+    t_smallest = np.arange(min_t_len)*dt_smallest
+    f_smallest = np.arange(min_freq_len)*df_smallest
 
     #compute mean, std, and zscored power spectrum across window sizes
     tf_mean = rs_specs_arr.mean(axis=0)
