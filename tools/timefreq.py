@@ -398,7 +398,7 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
         ps_log = postprocess_spectrogram(ps)
         timefreqs.append( (t, freq, ps_log) )
     etime = time.time() - stime
-    print 'time to compute %d spectrograms: %0.6fs' % (len(win_sizes), etime)
+    #print 'time to compute %d spectrograms: %0.6fs' % (len(win_sizes), etime)
 
     #compute the mean spectrogram across window sizes
     nyquist_freq = sample_rate / 2.0
@@ -415,7 +415,7 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
         rs_t,rs_freq,rs_ps = resample_spectrogram(t, freq, ps, dt_smallest, df_smallest)
         rs_specs.append(rs_ps)
     etime = time.time() - stime
-    print 'time to resample %d spectrograms: %0.6fs' % (len(win_sizes), etime)
+    #print 'time to resample %d spectrograms: %0.6fs' % (len(win_sizes), etime)
 
     #get the shortest spectrogram length
     min_freq_len = np.min([rs_ps.shape[0] for rs_ps in rs_specs])
