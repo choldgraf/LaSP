@@ -89,7 +89,7 @@ class InCrowd(object):
         IEEE TRANSACTIONS ON SIGNAL PROCESSING, VOL. 59, NO. 10, OCTOBER 2011
     """
 
-    def __init__(self, model, solver_class=SPAMSLassoSolver, solver_params={}, max_contrast_ratio=np.Inf, max_additions_fraction=0.75):
+    def __init__(self, model, solver_class=SPAMSLassoSolver, solver_params=dict(), max_contrast_ratio=np.Inf, max_additions_fraction=0.75):
         self.model = model
 
         self.max_contrast_ratio = max_contrast_ratio
@@ -158,9 +158,9 @@ class InCrowd(object):
         #print 'inactive_set=',self.inactive_set
 
         #get submatrix of active components
-        Asub = self.model.submatrix(self.active_set)
+        Asub = self.model.submatrix(self.active_set, include_bias=True)
         ysub = self.model.target()
-        x0sub = self.x[self.active_set]
+        x0sub = np.concatenate([self.x[self.active_set], [self.model.bias]])
 
         #print 'Asub.shape=',Asub.shape
         #print 'ysub.shape=',ysub.shape
@@ -170,9 +170,12 @@ class InCrowd(object):
         as_signs = []
         for asindex in self.active_set:
             as_signs.append(self.active_set_signs[asindex])
+        as_signs.append(1.0)  #for the bias term
 
         #use interior solver to get solution for new active set
         xsub = self.dense_solver.solve(Asub, ysub, x0sub, np.array(as_signs))
+        self.model.bias = xsub[-1]
+        xsub = xsub[:-1]
 
         #print 'type(xsub)=',type(xsub).__name__
 
@@ -342,8 +345,10 @@ class ConvolutionalInCrowdModel(InCrowdModel):
 
         return u
 
-    def submatrix(self, indices):
-        A = np.zeros([self.input.shape[0], len(indices)])
+    def submatrix(self, indices, include_bias=False):
+        A = np.zeros([self.input.shape[0], len(indices)+include_bias])
+        if include_bias:
+            A[:, -1] = 1.0 # the bias term
         d = len(self.time_lags)
         m = self.num_channels
         all_indices = np.arange(d*m)
@@ -416,7 +421,7 @@ def fast_conv(input, filter, time_lags, bias=0.0):
     a = np.zeros( [nsamps, 1] )
     for k,ti in enumerate(time_lags):
         #print '\tti=%d' % ti
-        #print '\tfilter[:, ti].shape=',filter[:, ti].shape
+        #print '\tk=%d, filter[:, k].shape=' % k,filter[:, k].shape
         at = input_T * filter[:, k].reshape(filter.shape[0], 1)
         if ti >= 0:
             if ti > 0:
