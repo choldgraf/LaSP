@@ -3,10 +3,7 @@ import numpy as np
 import operator
 import matplotlib.pyplot as plt
 
-try:
-    from spams import lasso
-except:
-    from spams import Lasso as lasso
+import spams
 
 try:
     from cvxopt import matrix as cvxopt_matrix, solvers as cvxopt_solvers
@@ -27,6 +24,9 @@ class SPAMSLassoSolver(object):
         if 'lambda2' in solver_params:
             self.lambda2 = solver_params['lambda2']
 
+        self.positive = False
+        if 'positive' in solver_params:
+            self.positive = solver_params['positive']
 
     def solve(self, A, y, x0, as_signs):
 
@@ -36,7 +36,13 @@ class SPAMSLassoSolver(object):
         fA = np.asfortranarray(A)
         #print 'fy.shape=',fy.shape
         #print 'fA.shape=',fA.shape
-        xnew = lasso(fy, fA, mode=2, lambda1=self.lambda1, lambda2=self.lambda2)
+        if not self.positive:
+            xnew = spams.lasso(fy, fA, mode=2, lambda1=self.lambda1, lambda2=self.lambda2)
+        else:
+            W = np.ones(len(x0))
+            params = {'lambda1':self.lambda1, 'pos':True}
+            xnew = spams.lassoWeighted(fy, fA, W, **params)
+
         xnew = np.array(xnew.todense()).reshape(x0.shape)
 
         #print 'dense_solver: xnew.shape=',xnew.shape
