@@ -184,11 +184,9 @@ def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
 
     srect = copy.copy(s)
     #rectify
-    srect[srect < 0.0] = 0.0
+    srect = np.abs(srect)
     #low pass filter
-    sfilt = lowpass_filter(srect, sample_rate, cutoff_freq)
-    #re-rectify
-    sfilt[sfilt < 0.0] = 0.0
+    sfilt = lowpass_filter(srect, sample_rate, cutoff_freq, filter_order=4)
     return sfilt
 
 

@@ -251,11 +251,18 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         return t,freq,timefreq
 
 
-def power_spectrum(s, sr):
+def power_spectrum(s, sr, log=False, max_val=None):
     f = fft(s)
     freq = fftfreq(len(s), d=1.0/sr)
     findex = freq >= 0.0
-    return freq[findex],np.abs(f[findex])
+    ps = np.abs(f)
+    if log:
+        if max_val is None:
+            max_val = ps.max()
+        ps /= max_val
+        ps = 20.0*np.log10(ps)
+
+    return freq[findex], ps[findex]
 
 
 def mt_power_spectrum(s, sample_rate, window_size, low_bias=False):
