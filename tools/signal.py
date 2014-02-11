@@ -5,7 +5,7 @@ from scipy.signal import filter_design, resample,filtfilt
 
 import nitime.algorithms as ntalg
 import time
-from tools.coherence import compute_coherence
+from tools.coherence import compute_mtcoherence
 
 
 def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
@@ -146,7 +146,7 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
     #get frequency axis values by computing coherence between dummy slice
     win1 = np.zeros([nwinlen])
     win2 = np.zeros([nwinlen])
-    cdata = compute_coherence(win1+1.0, win2+1.0, sample_rate, window_size=window_size, bandwidth=bandwidth)
+    cdata = compute_mtcoherence(win1+1.0, win2+1.0, sample_rate, window_size=window_size, bandwidth=bandwidth)
     freq = cdata.frequency
 
     #construct the time-frequency representation for time-varying coherence
@@ -190,7 +190,7 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         #      ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
 
         #compute the coherence
-        cdata = compute_coherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
+        cdata = compute_mtcoherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
         timefreq[:, k] = cdata.coherence
         if debug:
             total_time = 0.0
@@ -217,7 +217,7 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
                 win2_shift = s2[w2si:w2ei]
                 #print 'len(s2)=%d, win2_shift_index=%d, w2si=%d, w2ei=%d, len(win1)=%d, len(win2_shift)=%d' % \
                 #      (len(s2), win2_shift_index, w2si, w2ei, len(win1), len(win2_shift))
-                cdata1 = compute_coherence(win1, win2_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
+                cdata1 = compute_mtcoherence(win1, win2_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
                 csum += cdata1.coherence
 
                 #compute coherence between win2 and randomly selected slice of s1
@@ -230,7 +230,7 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
                 win1_shift = s1[w1si:w1ei]
                 #print 'nwindows=%d, len(s1)=%d, win1_shift_index=%d, w1si=%d, w1ei=%d, len(win2)=%d, len(win1_shift)=%d' % \
                 #      (nwindows, len(s1), win1_shift_index, w1si, w1ei, len(win2), len(win1_shift))
-                cdata2 = compute_coherence(win2, win1_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
+                cdata2 = compute_mtcoherence(win2, win1_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
                 csum += cdata2.coherence
 
                 if debug:

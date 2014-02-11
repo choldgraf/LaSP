@@ -224,7 +224,7 @@ def compute_single_spike_coherence_bound(spike_trials_by_stim, bandwidth, window
         return cnorm
 
     sample_rate = 1.0 / bin_size
-    cdata = compute_coherence(even_psth, odd_psth, sample_rate, window_size, bandwidth=bandwidth,
+    cdata = compute_mtcoherence(even_psth, odd_psth, sample_rate, window_size, bandwidth=bandwidth,
                               frequency_cutoff=frequency_cutoff, tanh_transform=tanh_transform)
 
     ncoherence_mean = cnormalize(cdata.coherence, ntrials)
@@ -261,7 +261,7 @@ def compute_coherence_model_performance(spike_trials_by_stim, psth_prediction, b
     sample_rate = 1.0 / bin_size
 
     #compute the non-normalized coherence between the real PSTH and the model prediction of the PSTH
-    cdata_model = compute_coherence(psth, psth_prediction, sample_rate, window_size, bandwidth=bandwidth, frequency_cutoff=frequency_cutoff)
+    cdata_model = compute_mtcoherence(psth, psth_prediction, sample_rate, window_size, bandwidth=bandwidth, frequency_cutoff=frequency_cutoff)
 
     def cnormalize(cbound, cpred, num_trials):
         sign = np.sign(cbound)
@@ -372,10 +372,11 @@ def compute_coherence_original(s1, s2, sample_rate, bandwidth, jackknife=False, 
 
     return cdata
 
-def compute_coherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_len_percentage_tolerance=0.30,
+
+def compute_mtcoherence(s1, s2, sample_rate, window_size, bandwidth=15.0, chunk_len_percentage_tolerance=0.30,
                       frequency_cutoff=None, tanh_transform=False, debug=False):
     """
-        Computing the coherence between signals s1 and s2. To do so, the signals are broken up into segments of length
+        Computing the multi-taper coherence between signals s1 and s2. To do so, the signals are broken up into segments of length
         specified by window_size. Then the multi-taper coherence is computed between each segment. The mean coherence
         is computed across segments, and an estimate of the coherence variance is computed across segments.
 
