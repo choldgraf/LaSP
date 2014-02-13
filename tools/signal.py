@@ -321,3 +321,14 @@ def match_power_spectrum(s, sample_rate, nsamps=5, isreal=False):
     if isreal:
         return np.real(s_recon)
     return s_recon
+
+
+def gaussian_window(N, nstd):
+    """
+        Generate a Gaussian window of length N and standard deviation nstd.
+    """
+    hnwinlen = (N + (1-N%2)) / 2
+    gauss_t = np.arange(-hnwinlen, hnwinlen+1, 1.0)
+    gauss_std = float(N) / float(nstd)
+    gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
+    return gauss_t,gauss_window

@@ -163,7 +163,7 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
         nwinlen += 1
     hnwinlen = nwinlen / 2
 
-    nincrement = int(sample_rate*increment)
+    nincrement = int(np.round(sample_rate*increment))
     nwindows = len(s) / nincrement
     #print 'len(s)=%d, nwinlen=%d, hwinlen=%d, nincrement=%d, nwindows=%d' % (len(s), nwinlen, hnwinlen, nincrement, nwindows)
 
@@ -197,6 +197,33 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
     t = np.arange(0, nwindows, 1.0) * increment
 
     return t, freq, tf
+
+
+def generate_sliding_windows(N, sample_rate, increment, window_length):
+    """
+        Generate a list of indices representing windows into a signal of length N.
+    """
+
+    #compute lengths in # of samples
+    nwinlen = int(sample_rate*window_length)
+    if nwinlen % 2 == 0:
+        nwinlen += 1
+    hnwinlen = nwinlen / 2
+
+    nincrement = int(np.round(sample_rate*increment))
+    nwindows = N / nincrement
+
+    windows = list()
+    for k in range(nwindows):
+        center = k*nincrement
+        si = center - hnwinlen
+        ei = center + hnwinlen + 1
+        windows.append( (center, si, ei) )
+
+    #compute the centers of each window
+    t = np.arange(0, nwindows, 1.0) * increment
+
+    return t, np.array(windows)
 
 
 def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6):
