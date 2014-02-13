@@ -3,7 +3,10 @@ import numpy as np
 import operator
 import matplotlib.pyplot as plt
 
-import spams
+try:
+    import spams
+except:
+    print "Cannot import spams! You won't be able to optimize!"
 
 try:
     from cvxopt import matrix as cvxopt_matrix, solvers as cvxopt_solvers
