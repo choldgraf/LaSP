@@ -145,6 +145,48 @@ def play_sound(file_name):
     """ Install sox to get this to work: http://sox.sourceforge.net/ """
     subprocess.call(['play', file_name])
 
+def play_wavfile(filename):
+
+    chunk_size = 1024
+
+    wf = wave.open(filename, "r")
+    p = pyaudio.PyAudio()
+    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+        channels=wf.getnchannels(),
+        rate=wf.getframerate(),
+        output=True)
+
+    data = wf.readframes(chunk_size)
+
+    while data != '':
+        stream.write(data)
+        data = wf.readframes(chunk_size)
+
+    wf.close()
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+
+def play_sound_array(data, sample_rate):
+    ''' Requires pyaudio package. Can be downloaded here
+    http://people.csail.mit.edu/hubert/pyaudio/
+    '''
+    # Only play one channel
+    if len(data.shape) > 1:
+        data = np.mean(data, axis=np.argmin(data.shape))
+
+    data = data.astype('int16')
+    p = pyaudio.PyAudio()
+    stream = p.open(format=p.get_format_from_width(2),
+        channels=1,
+        rate=int(sample_rate),
+        output=True)
+
+    stream.write(data.tostring())
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+
 
 def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True):
     """
