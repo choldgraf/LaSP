@@ -228,8 +228,9 @@ def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
     #rectify
     srect = np.abs(srect)
     #low pass filter
-    sfilt = lowpass_filter(srect, sample_rate, cutoff_freq, filter_order=4)
-    return sfilt
+    if cutoff_freq is not None:
+        srect = lowpass_filter(srect, sample_rate, cutoff_freq, filter_order=4)
+    return srect
 
 
 def recursive_ls(root_dir, file_pattern):
