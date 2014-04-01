@@ -168,3 +168,15 @@ def finite_diff_grad(errorfunc, params, eps=1e-8):
         fdgrad[k] = (merr - base_err) / eps
 
     return fdgrad
+
+
+def find_index(arr, vals):
+    """
+        Find the elements of arr that take on values in vals. Returns a logical array.
+    """
+    index = np.zeros([len(arr)], dtype='bool')
+
+    for v in vals:
+        index |= arr == v
+
+    return index
