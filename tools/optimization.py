@@ -1,5 +1,61 @@
 import copy
 import numpy as np
+from tools.incrowd import ConvolutionalInCrowdModel, fast_conv, fast_conv_grouped
+
+
+class ConvolutionalLinearModel(ConvolutionalInCrowdModel):
+    """
+        Wrapper class for use with ThresholdGradientDescent optimization class, also
+        provides a gradient calculation.
+    """
+
+    def __init__(self, input, target, ndelays=None, bias=0.0, group_index=None, lags=None):
+        ConvolutionalInCrowdModel.__init__(self, input, target, ndelays, bias, group_index, lags)
+
+    def error_vector(self, x):
+        bias = x[-1]
+        filt = self.get_filter(x[:-1])
+        if self.group_index is None:
+            yhat = fast_conv(self.input, filt, self.time_lags, bias=bias)
+        else:
+            yhat = fast_conv_grouped(self.input, filt, self.time_lags, group_index=self.group_index, bias=bias)
+
+        return self.target_val - yhat
+
+    def error(self, x):
+        esq = self.error_vector(x)**2
+        return esq.sum()
+
+    def grad(self, x):
+        e = self.error_vector(x)
+
+        gfilt = np.zeros([self.num_channels, self.ndelays])
+        tlen = len(e)
+        for k,lag in enumerate(self.time_lags):
+            if lag > 0:
+                #causal filter component
+                stim_start_index = 0
+                stim_end_index = tlen - lag
+                r_start_index = lag
+                r_end_index = tlen
+            else:
+                #acausal filter component
+                stim_start_index = abs(lag)
+                stim_end_index = tlen
+                r_start_index = 0
+                r_end_index = tlen - abs(lag)
+
+            #print 'lag=%d, stim_start=%d, stim_end=%d, r_start=%d, r_end=%d' % (lag, stim_start_index, stim_end_index, r_start_index, r_end_index)
+
+            gfilt[:, k] = (self.input.T[:, stim_start_index:stim_end_index] * e[r_start_index:r_end_index]).sum(axis=1)
+
+        #print 'gfilt=',gfilt.ravel()
+
+        g = np.zeros([self.ndelays*self.num_channels + 1])
+        g[:-1] = -2*gfilt.ravel()
+        g[-1] = -2*e.sum()
+
+        return g
 
 
 class ThresholdGradientDescent(object):
@@ -89,6 +145,8 @@ class ThresholdGradientDescent(object):
                 slope /= np.abs(np.array(self.errors[-self.num_iters_for_slope:]).mean())
                 self.slope = slope
                 if self.slope > self.slope_threshold:
+                    print '[ThresholdGradientDescent] cross slope threshold on iteration %d, slope=%f' % \
+                          (self.iter+1, self.slope)
                     self.converged = True
 
                 if e < self.best_err:
@@ -106,6 +164,7 @@ def finite_diff_grad(errorfunc, params, eps=1e-8):
     for k in range(len(params)):
         dparams = copy.deepcopy(params)
         dparams[k] += eps
-        fdgrad[k] = (errorfunc(dparams) - base_err) / eps
+        merr = errorfunc(dparams)
+        fdgrad[k] = (merr - base_err) / eps
 
     return fdgrad

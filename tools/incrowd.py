@@ -328,7 +328,7 @@ class ConvolutionalInCrowdModel(InCrowdModel):
     def forward(self, x):
         filter = self.get_filter(x)
         if self.group_index is None:
-            yhat = fast_conv(self.input, filter, self.time_lags)
+            yhat = fast_conv(self.input, filter, self.time_lags, bias=self.bias)
         else:
             yhat = fast_conv_grouped(self.input, filter, self.time_lags, group_index=self.group_index, bias=self.bias)
 
