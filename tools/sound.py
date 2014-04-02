@@ -118,7 +118,7 @@ class WavFile():
             plt.axis('tight')
 
 
-def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.jet, colorbar=True):
+def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, colormap=cmap.jet, colorbar=True, vmin=None, vmax=None):
     if ax is None:
         ax = plt.gca()
 
@@ -129,7 +129,11 @@ def plot_spectrogram(t, freq, spec, ax=None, ticks=True, fmin=None, fmax=None, c
     pfreq = freq[(freq >= fmin) & (freq <= fmax)]
 
     ex = (t.min(), t.max(), pfreq.min(), pfreq.max())
-    iax = ax.imshow(spec, aspect='auto', interpolation='nearest', origin='lower', extent=ex, cmap=colormap)
+    if vmin is None:
+        vmin = spec.min()
+    if vmax is None:
+        vmax = spec.max()
+    iax = ax.imshow(spec, aspect='auto', interpolation='nearest', origin='lower', extent=ex, cmap=colormap, vmin=vmin, vmax=vmax)
     if not ticks:
         ax.set_xticks([])
         ax.set_yticks([])

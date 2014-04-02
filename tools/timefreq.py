@@ -357,7 +357,8 @@ def postprocess_spectrogram(spec, thresh_percentile=10.0):
         nz = spec > 0.0
         lspec[nz] = 20*np.log10(spec[nz])
         thresh = np.percentile(lspec.ravel(), thresh_percentile)
-        lspec[lspec < thresh] = thresh
+        lspec += thresh
+        lspec[lspec < 0.0] = 0.0
         return lspec
 
 
