@@ -1,9 +1,11 @@
 
 import numpy as np
+from sklearn.linear_model import Ridge
 import spams
+import time
 
 
-def make_toeplitz(input, lags, include_bias=True):
+def make_toeplitz(input, lags, include_bias=True, fortran_style=False):
     """
         Assumes input is of dimensionality nt x nf, where nt is the number of time points and
         nf is the number of features.
@@ -16,7 +18,10 @@ def make_toeplitz(input, lags, include_bias=True):
     nf = input.shape[1]
     d = len(lags)
 
-    A = np.zeros([nt, nf*d+include_bias])
+    if fortran_style:
+        A = np.zeros([nt, nf*d+include_bias], order='F')
+    else:
+        A = np.zeros([nt, nf*d+include_bias])
     if include_bias:
         A[:, -1] = 1.0 # the bias term
 
@@ -47,34 +52,56 @@ def make_toeplitz(input, lags, include_bias=True):
     return A
 
 
-def fit_strf(input, output, lags, params={'solver':'lasso', 'lambda1':1.0, 'lambda2':1.0}):
+def fit_strf_lasso(input, output, lags, lambda1=1.0, lambda2=1.0):
 
     #convert the input into a toeplitz-like matrix
-    A = make_toeplitz(input, lags, include_bias=True)
-
-    """
-    #pre-compute A'A
-    p = A.shape[1]
-    AA = np.zeros([p, p])
-    for k in range(p):
-        AA[:, k] = np.dot(A.T, A[:, k])
-
-    #pre-compute A'y
-    Ay = np.dot(A.T, output)
-    """
+    stime = time.time()
+    A = make_toeplitz(input, lags, include_bias=True, fortran_style=True)
+    etime = time.time() - stime
+    print '[fit_strf_lasso] Time to make Toeplitz matrix: %d seconds' % etime
 
     fy = np.asfortranarray(output.reshape(len(output), 1))
-    fA = np.asfortranarray(A)
     #print 'fy.shape=',fy.shape
     #print 'fA.shape=',fA.shape
 
     #fit the STRF
-    strf = spams.lasso(fy, fA, mode=2, lambda1=params['lambda1'], lambda2=params['lambda2'])
+    stime = time.time()
+    fit_params = spams.lasso(fy, A, mode=2, lambda1=lambda1, lambda2=lambda2)
+    etime = time.time() - stime
+    print '[fit_strf_lasso] Time to fit STRF: %d seconds' % etime
 
     #reshape the STRF so that it makes sense
     nt = input.shape[0]
     nf = input.shape[1]
     d = len(lags)
-    strf = np.array(strf.todense()).reshape([nf, d])
+    strf = np.array(fit_params[:-1].todense()).reshape([nf, d])
+    bias = fit_params[-1].todense()[0, 0]
 
-    return strf
+    return strf,bias
+
+
+def fit_strf_ridge(input, output, lags, alpha=1.0):
+
+    #convert the input into a toeplitz-like matrix
+    stime = time.time()
+    A = make_toeplitz(input, lags, include_bias=False)
+    etime = time.time() - stime
+    print '[fit_strf_ridge] Time to make Toeplitz matrix: %d seconds' % etime
+
+    #fit the STRF
+    stime = time.time()
+
+    rr = Ridge(alpha=alpha, copy_X=False, fit_intercept=True, normalize=False)
+    rr.fit(A, output)
+    etime = time.time() - stime
+    print '[fit_strf_ridge] Time to fit STRF: %d seconds' % etime
+
+    #reshape the STRF so that it makes sense
+    nt = input.shape[0]
+    nf = input.shape[1]
+    d = len(lags)
+    strf = np.array(rr.coef_).reshape([nf, d])
+    bias = rr.intercept_
+
+    return strf,bias
+
