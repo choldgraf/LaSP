@@ -1,6 +1,10 @@
 
 import numpy as np
-from sklearn.linear_model import Ridge
+try:
+    from sklearn.linear_model import Ridge
+except:
+    from scikits.learn.linear_model import Ridge
+    
 import spams
 import time
 
@@ -52,7 +56,7 @@ def make_toeplitz(input, lags, include_bias=True, fortran_style=False):
     return A
 
 
-def fit_strf_lasso(input, output, lags, lambda1=1.0, lambda2=1.0):
+def fit_strf_lasso(input, output, lags, lambda1=1.0, lambda2=1.0, num_threads=-1):
 
     #convert the input into a toeplitz-like matrix
     stime = time.time()
@@ -66,7 +70,7 @@ def fit_strf_lasso(input, output, lags, lambda1=1.0, lambda2=1.0):
 
     #fit the STRF
     stime = time.time()
-    fit_params = spams.lasso(fy, A, mode=2, lambda1=lambda1, lambda2=lambda2)
+    fit_params = spams.lasso(fy, A, mode=2, lambda1=lambda1, lambda2=lambda2, numThreads=num_threads)
     etime = time.time() - stime
     print '[fit_strf_lasso] Time to fit STRF: %d seconds' % etime
 
