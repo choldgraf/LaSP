@@ -4,7 +4,7 @@ try:
     from sklearn.linear_model import Ridge
 except:
     from scikits.learn.linear_model import Ridge
-    
+
 import spams
 import time
 
@@ -95,7 +95,8 @@ def fit_strf_ridge(input, output, lags, alpha=1.0):
     #fit the STRF
     stime = time.time()
 
-    rr = Ridge(alpha=alpha, copy_X=False, fit_intercept=True, normalize=False)
+    #rr = Ridge(alpha=alpha, copy_X=False, fit_intercept=True)
+    rr = Ridge(alpha=alpha, fit_intercept=True)
     rr.fit(A, output)
     etime = time.time() - stime
     print '[fit_strf_ridge] Time to fit STRF: %d seconds' % etime
