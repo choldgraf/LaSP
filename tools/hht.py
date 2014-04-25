@@ -39,7 +39,7 @@ class HHT(object):
         Rev. Geophys., 46, RG2006, doi:10.1029/2007RG000228
     """
 
-    def __init__(self, s, sample_rate, emd_max_modes=np.inf, emd_resid_tol=1e-3,
+    def __init__(self, s, sample_rate, emd_max_modes=30, emd_resid_tol=1e-3,
                  sift_mean_tol=1e-3, sift_stoppage_S=3, sift_max_iter=100, sift_remove_edge_effects=True,
                  ensemble_num_samples=1, ensemble_noise_gain=1.5,
                  hilbert_max_iter=20,
@@ -134,6 +134,10 @@ class HHT(object):
         imf = copy.copy(s)
         #find extrema for first iteration
         mini,maxi = self.find_extrema(s)
+
+        if len(mini) == 0 or len(maxi) == 0:
+            return None
+
         #keep track of extrema difference
         num_extrema = np.zeros([self.sift_stoppage_S, 2])  # first column are maxima, second column are minima
         num_extrema[-1, :] = [len(maxi), len(mini)]
@@ -263,6 +267,9 @@ class HHT(object):
             #compute the IMF from the signal
             if self.ensemble_num_samples == 1:
                 imf_mean = self.compute_imf(r)
+                if imf_mean is None:
+                    stop = True
+                    break
                 imf_std = np.zeros_like(imf_mean)
             else:
                 imf_mean,imf_std = self.compute_imf_ensemble(r)
