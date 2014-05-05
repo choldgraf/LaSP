@@ -15,10 +15,8 @@ class IMF(object):
     def __init__(self):
         self.imf = None
         self.std = None
-        self.am = None
-        self.fm = None
+        self.amplitude = None
         self.phase = None
-        self.ifreq = None
 
 
 class HHT(object):
@@ -275,16 +273,16 @@ class HHT(object):
                 imf_mean,imf_std = self.compute_imf_ensemble(r)
 
             #compute the normalized hilbert transform
-            am,fm,phase,ifreq = self.normalized_hilbert(imf_mean)
+            #am,fm,phase,ifreq = self.normalized_hilbert(imf_mean)
+            amplitude,phase = self.hilbert(imf_mean)
 
             #construct an IMF object
             imf = IMF()
             imf.imf = imf_mean
             imf.std = imf_std
-            imf.am = am
-            imf.fm = fm
+            imf.amplitude = amplitude
             imf.phase = phase
-            imf.ifreq = ifreq
+
             self.imfs.append(imf)
 
             #subtract the IMF off to produce a new residual
@@ -299,6 +297,14 @@ class HHT(object):
 
         #append the residual as the last mode
         self.emd_residual = r
+
+    def hilbert(self, s):
+        """
+            Perform the Hilbert transform on the signal s.
+        """
+        z = hilbert(s)
+        return np.abs(z),np.angle(z)
+
 
     def normalized_hilbert(self, s):
         """
