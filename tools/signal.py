@@ -332,3 +332,22 @@ def gaussian_window(N, nstd):
     gauss_std = float(N) / float(nstd)
     gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
     return gauss_t,gauss_window
+
+
+def find_extrema(s):
+    """
+        Find the max and mins of a signal s.
+    """
+    max_env = np.logical_and(
+                        np.r_[True, s[1:] > s[:-1]],
+                        np.r_[s[:-1] > s[1:], True])
+    min_env = np.logical_and(
+                        np.r_[True, s[1:] < s[:-1]],
+                        np.r_[s[:-1] < s[1:], True])
+    max_env[0] = max_env[-1] = False
+
+    #exclude endpoints
+    mini = [m for m in min_env.nonzero()[0] if m != 0 and m != len(s)-1]
+    maxi = [m for m in max_env.nonzero()[0] if m != 0 and m != len(s)-1]
+
+    return mini,maxi

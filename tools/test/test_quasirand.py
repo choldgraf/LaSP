@@ -18,7 +18,7 @@ class QausirandlTest(unittest.TestCase):
 
     def test2d(self):
 
-        #generate 100 random 2D points
+        #generate random 2D points
         M = 2
         N = 1000
         R = quasirand(M, N, type='sobol', spherical=False)
@@ -31,7 +31,7 @@ class QausirandlTest(unittest.TestCase):
         plt.plot(R[0, :].squeeze(), R[1, :].squeeze(), 'ro')
         plt.axis('tight')
 
-        #generate 100 random 3D points on a sphere
+        #generate random 3D points on a sphere
         M = 3
         N = 1000
         R = quasirand(M, N, type='sobol', spherical=True)

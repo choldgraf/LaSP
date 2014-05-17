@@ -31,7 +31,7 @@ def quasirand(M, N, type='sobol', spherical=False):
         # taken from equation 3.2 of N. Rehman and D. P. Mandic "Multivariate empirical mode decomposition" (2014)
 
         #rescale the random numbers so they lie in (-pi, pi]
-        pi_eps = 1e-3
+        pi_eps = 1e-6
         R *= 2*np.pi - pi_eps
         R -= np.pi - pi_eps
 
@@ -44,7 +44,6 @@ def quasirand(M, N, type='sobol', spherical=False):
             #construct the new row, which will be a product of sines and one cosine
             new_row = np.ones([N])
             for j in range(k):
-                print 'k=%d, j=%d' % (k, j)
                 new_row *= np.sin(R[j, :])
 
             #multiply the last term, a cosine for all but the very last row

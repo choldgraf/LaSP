@@ -6,6 +6,7 @@ from scipy.signal import hilbert
 from scipy.stats import pearsonr
 
 import matplotlib.pyplot as plt
+from tools.signal import find_extrema
 
 
 class IMF(object):
@@ -81,24 +82,6 @@ class HHT(object):
         if compute_on_init:
             self.compute_emd(self.s)
 
-    def find_extrema(self, s):
-        """
-            Find the max and mins of a signal s.
-        """
-        max_env = np.logical_and(
-                            np.r_[True, s[1:] > s[:-1]],
-                            np.r_[s[:-1] > s[1:], True])
-        min_env = np.logical_and(
-                            np.r_[True, s[1:] < s[:-1]],
-                            np.r_[s[:-1] < s[1:], True])
-        max_env[0] = max_env[-1] = False
-
-        #exclude endpoints
-        mini = [m for m in min_env.nonzero()[0] if m != 0 and m != len(s)-1]
-        maxi = [m for m in max_env.nonzero()[0] if m != 0 and m != len(s)-1]
-
-        return mini,maxi
-
     def compute_imf_ensemble(self, s):
         """
             Computes the ensemble-empirical model decomposition (EEMD, Huang et. al 2008).
@@ -131,7 +114,7 @@ class HHT(object):
         #make a copy of the signal
         imf = copy.copy(s)
         #find extrema for first iteration
-        mini,maxi = self.find_extrema(s)
+        mini,maxi = find_extrema(s)
 
         if len(mini) == 0 or len(maxi) == 0:
             return None
@@ -237,7 +220,7 @@ class HHT(object):
             imf = d
 
             #check for IMF S-stoppage criteria
-            mini,maxi = self.find_extrema(imf)
+            mini,maxi = find_extrema(imf)
             num_extrema = np.roll(num_extrema, -1, axis=0)
             num_extrema[-1, :] = [len(mini), len(maxi)]
             if iter >= self.sift_stoppage_S:
@@ -289,7 +272,7 @@ class HHT(object):
             r -= imf_mean
 
             #compute extrema for detecting a trend IMF
-            maxi,mini = self.find_extrema(r)
+            maxi,mini = find_extrema(r)
 
             #compute convergence criteria
             if np.abs(r).sum() < self.emd_resid_tol or len(self.imfs) == self.emd_max_modes or (len(maxi) == 0 and len(mini) == 0):
@@ -320,7 +303,7 @@ class HHT(object):
         while not converged:
             #take the absolute value of the IMF and find the extrema
             absx = np.abs(x)
-            mini,maxi = self.find_extrema(absx)
+            mini,maxi = find_extrema(absx)
             if len(mini) == 0 or len(maxi) == 0:
                 converged = True
                 break
