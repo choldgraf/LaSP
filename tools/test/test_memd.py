@@ -5,7 +5,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from scipy.interpolate import splev
-from tools.memd import create_mirrored_spline
+from tools.memd import create_mirrored_spline, compute_mean_envelope, sift
 from tools.signal import find_extrema
 
 
@@ -42,6 +42,7 @@ class MEMDTest(unittest.TestCase):
         high_env = splev(ti, high_spline)
         env = (high_env + low_env) / 2.0
 
+        """
         plt.figure()
         plt.plot(t, s, 'k-', linewidth=2.0)
         plt.plot(t, low_env, 'b-')
@@ -64,7 +65,68 @@ class MEMDTest(unittest.TestCase):
         plt.axis('tight')
 
         plt.show()
+        """
+
+    def create_multivariate_signal(self):
+        nchannels = 3
+        freqs = {2.0:[0, 1], 25.0:[0], 40.0:[0, 1, 2], 63:[1, 2]}
+
+        sr = 1e3
+        dt = 1.0 / sr
+        t = np.arange(0.0, 1.0+dt, dt)
+        s = np.zeros([nchannels, len(t)])
+
+        for f,chans in freqs.iteritems():
+            for chan in chans:
+                s[chan, :] += np.sin(2*np.pi*f*t)
+
+        return s
 
     def test_mean_envelope(self):
-        pass
+
+        #create a multi-variate signal with shared frequencies across subsets of the channel
+        s = self.create_multivariate_signal()
+        mean_env = compute_mean_envelope(s, nsamps=5000)
+
+        """
+        c = ['r-', 'b-', 'g-']
+        plt.figure()
+        for k in range(nchannels):
+            plt.subplot(nchannels, 1, k+1)
+            plt.plot(t, s[k, :], c[k], linewidth=2.0)
+            plt.plot(t, mean_env[k, :], 'k-')
+            plt.axis('tight')
+
+        plt.show()
+        """
+
+    def test_sift(self):
+
+        s = self.create_multivariate_signal()
+        nchannels,T = s.shape
+        sr = 1e3
+        dt = 1.0 / sr
+        t = np.arange(0, T)*dt
+
+        imf1 = sift(s, nsamps=5000, resolution=1.0, max_iterations=100)
+
+        c = ['r-', 'b-', 'g-']
+        plt.figure()
+        for k in range(nchannels):
+            plt.subplot(nchannels, 1, k+1)
+            sig = s[k, :].squeeze()
+            diff = sig - imf1[k, :]
+            print 'absdiff for chan %d: %f' % (k, np.abs(diff).mean())
+            plt.plot(t, sig, c[k], linewidth=2.0)
+            plt.plot(t, imf1[k, :], 'k-', alpha=0.7)
+            plt.axis('tight')
+
+        plt.show()
+
+
+if __name__ == '__main__':
+
+    unittest.main()
+
+
 

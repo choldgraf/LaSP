@@ -6,6 +6,7 @@
 import copy
 import numpy as np
 from scipy.interpolate import splrep,splev
+from scipy.stats import pearsonr
 from tools.quasirand import quasirand
 from tools.signal import find_extrema
 
@@ -68,8 +69,12 @@ def compute_mean_envelope(s, nsamps=1000):
     for k in range(nsamps):
         r = R[:, k].squeeze()
 
+        #print 'k=%d, s.shape=%s, r.shape=%s' % (k, str(s.shape), str(r.shape))
+
         #project s onto a scalar time series using random vector
-        p = np.dot(s, r)
+        p = np.dot(s.T, r)
+
+        #print 'p.shape=',p.shape
 
         #identify minima and maxima of projection
         mini_p,maxi_p = find_extrema(p)
@@ -91,24 +96,71 @@ def compute_mean_envelope(s, nsamps=1000):
             #compute the envelope for this projected dimension
             env = (upper_env + lower_env) / 2.0
 
-            #update the mean for this dimension in an online way
+            #update the mean envelope for this dimension in an online way
             delta = env - mean_env[k, :]
             mean_env[k, :] += delta / (k+1)
 
     return mean_env
 
 
-def sift(s, nsamps=100):
+def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
     """Do a single iteration of multi-variate empirical mode decomposition (MEMD) on the multi-dimensional signal s, obtaining a multi-variate IMF.
 
     Args:
         s (np.ndarray): an NxT matrix describing a multi-variate signal. N is the number of channels, T is the number of time points.
         nsamps (int): the number of N dimensional projections to use in computing the multi-variate envelope.
+        resolution (float): the maximum log10 ratio of the initial signal energy to average envelope energy, used as stopping criteria (Rato et. al 2008, sec 3.2.3)
+        max_iterations (int): the maximum number of iterations before quitting
 
     Returns:
         imf (np.ndarray): an NxT matrix giving the multi-dimensional IMF for this sift.
 
     """
 
-    pass
+    converged = False
 
+    # inintialize the residual signal to the signal
+    N,T = s.shape
+    r = copy.copy(s)
+    initial_energy = (s**2).mean()
+    avg_envelope_energy = 0.0
+    iteration = 1
+    while not converged:
+        # compute the mean envelope
+        env = compute_mean_envelope(r, nsamps=nsamps)
+
+        #update the average envelope energy
+        env_energy = (env**2).mean()
+        avg_envelope_energy += (env_energy - avg_envelope_energy) / iteration
+
+        # compute the fraction of the mean_envelope that will be subtracted from the residual, meant to minimize the
+        # energy of the signal (Rato et. al 2008, sec 3.2.3)
+        alpha = np.zeros([N])
+        for k in range(N):
+            a,p = pearsonr(r[k, :], env[k, :])
+            assert a > 0.0
+            alpha[k] = max(a, 1e-2)
+
+        # subtract the mean envelope from the residual
+        r -= alpha.mean()*env
+
+        # test the residual for convergence to an IMF using stoppage criteria
+
+        #compute the "resolution factor", the ratio of initial energy to average envelope energy. the higher the
+        #"resolution", the lower the average envelope energy, meaning that the IMF is converging.
+        resolution_factor = np.log10(initial_energy / avg_envelope_energy)
+
+        print 'sift iter %d: initial_energy=%0.3f, env_energy=%0.3f, avg_envelope_energy=%0.3f, alpha.mean()=%0.6f, resolution_factor=%0.2f' % \
+              (iteration, initial_energy, env_energy, avg_envelope_energy, alpha.mean(), resolution_factor)
+
+        if resolution_factor > resolution:
+            converged = True
+        if iteration >= max_iterations:
+            converged = True
+
+        iteration += 1
+
+    # after repeatedly subtracting off the mean envelope, we are left with the intrinsic mode function (IMF), which
+    # basically contains the higher frequency components of the original signal, with the lower frequency components
+    # subtracted off in a way that deals well with nonstationarity
+    return r
