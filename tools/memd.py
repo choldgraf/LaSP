@@ -138,7 +138,6 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
         alpha = np.zeros([N])
         for k in range(N):
             a,p = pearsonr(r[k, :], env[k, :])
-            assert a > 0.0
             alpha[k] = max(a, 1e-2)
 
         # subtract the mean envelope from the residual
@@ -164,3 +163,15 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
     # basically contains the higher frequency components of the original signal, with the lower frequency components
     # subtracted off in a way that deals well with nonstationarity
     return r
+
+
+def memd(s, nimfs, nsamps=5000, resolution=1.0, max_iterations=30):
+
+    imfs = list()
+    r = copy.copy(s)
+    for n in range(nimfs):
+        imf = sift(r, nsamps=nsamps, resolution=resolution, max_iterations=max_iterations)
+        imfs.append(imf)
+        r -= imf
+
+    return np.array(imfs)

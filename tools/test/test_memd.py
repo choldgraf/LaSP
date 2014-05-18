@@ -108,18 +108,24 @@ class MEMDTest(unittest.TestCase):
         dt = 1.0 / sr
         t = np.arange(0, T)*dt
 
-        imf1 = sift(s, nsamps=5000, resolution=1.0, max_iterations=100)
+        nimfs = 4
+        imfs = list()
+        r = copy.copy(s)
+        for n in range(nimfs):
+            imf = sift(r, nsamps=5000, resolution=1.0, max_iterations=100)
+            imfs.append(imf)
+            r -= imf
 
         c = ['r-', 'b-', 'g-']
         plt.figure()
-        for k in range(nchannels):
-            plt.subplot(nchannels, 1, k+1)
-            sig = s[k, :].squeeze()
-            diff = sig - imf1[k, :]
-            print 'absdiff for chan %d: %f' % (k, np.abs(diff).mean())
-            plt.plot(t, sig, c[k], linewidth=2.0)
-            plt.plot(t, imf1[k, :], 'k-', alpha=0.7)
-            plt.axis('tight')
+        for n,imf in enumerate(imfs):
+            for k in range(nchannels):
+                sp = nchannels*n + k + 1
+                plt.subplot(len(imfs), nchannels, sp)
+                sig = s[k, :].squeeze()
+                plt.plot(t, sig, c[k], linewidth=2.0, alpha=0.6)
+                plt.plot(t, imf[k, :], 'k-', alpha=0.9)
+                plt.axis('tight')
 
         plt.show()
 
