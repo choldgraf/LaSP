@@ -7,6 +7,7 @@ import copy
 import numpy as np
 from scipy.interpolate import splrep,splev
 from scipy.stats import pearsonr
+import time
 from tools.quasirand import quasirand
 from tools.signal import find_extrema
 
@@ -64,30 +65,42 @@ def compute_mean_envelope(s, nsamps=1000):
     mean_env = np.zeros([N, T])
 
     #generate quasi-random points on an N-dimensional sphere
+    stime = time.time()
     R = quasirand(N, nsamps, spherical=True)
+    etime = time.time() - stime
+    print 'Elapsed time for quasirand: %d seconds' % int(etime)
 
+    stime = time.time()
     for k in range(nsamps):
+        istime = time.time()
         r = R[:, k].squeeze()
 
         #print 'k=%d, s.shape=%s, r.shape=%s' % (k, str(s.shape), str(r.shape))
 
         #project s onto a scalar time series using random vector
+        #dtime = time.time()
         p = np.dot(s.T, r)
+        #detime = time.time() - dtime
+        #print '\t[%d] Time to do dot %0.6f s' % (k, detime)
 
         #print 'p.shape=',p.shape
 
         #identify minima and maxima of projection
+        #eetime = time.time()
         mini_p,maxi_p = find_extrema(p)
+        #eeetime = time.time() - eetime
+        #print '\t[%d] time to find extrema: %0.6fs' % (k, eeetime)
 
         #for each signal dimension, fit maxima with cubic spline to produce envelope
 
         t = np.arange(T)
-        for k in range(N):
+        for n in range(N):
+            #sptime = time.time()
             mini = copy.copy(mini_p)
             maxi = copy.copy(maxi_p)
 
             #extrapolate edges using mirroring
-            lower_env_spline, upper_env_spline = create_mirrored_spline(mini, maxi, s[k, :].squeeze())
+            lower_env_spline, upper_env_spline = create_mirrored_spline(mini, maxi, s[n, :].squeeze())
 
             #evaluate upper and lower envelopes
             upper_env = splev(t, upper_env_spline)
@@ -97,8 +110,15 @@ def compute_mean_envelope(s, nsamps=1000):
             env = (upper_env + lower_env) / 2.0
 
             #update the mean envelope for this dimension in an online way
-            delta = env - mean_env[k, :]
-            mean_env[k, :] += delta / (k+1)
+            delta = env - mean_env[n, :]
+            mean_env[n, :] += delta / (k+1)
+            #esptime = time.time() - sptime
+            #print '\t[%d] time for spline iteration on dimension %d: %0.6fs' % (k, n, esptime)
+        ietime = time.time() - istime
+        print '\t[%d] took %0.6f seconds' % (k, ietime)
+
+    etime = time.time() - stime
+    print '%d samples took %0.6f seconds' % (nsamps, etime)
 
     return mean_env
 
