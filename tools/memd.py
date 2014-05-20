@@ -2,6 +2,9 @@
     Implementation of multi-variate EMD according to:
     N Rehman and DP Mandic "Multivariate empirical mode decomposition"
     Proc. R. Soc. A (2010) 466, 1291-1302 doi:10.1098/rspa.2009.0502
+
+
+
 """
 import copy
 import numpy as np
@@ -40,6 +43,9 @@ def create_mirrored_spline(mini, maxi, s):
     s_max.append(s_max[-1])
     mini.append((T-Tr) + T)
     s_min.append(s_min[-1])
+
+    if len(maxi) < 4 or len(mini) < 4:
+        return None, None
 
     #interpolate the upper and lower envelopes
     upper_env_spline = splrep(maxi, s_max, k=3)
@@ -98,9 +104,13 @@ def compute_mean_envelope(s, nsamps=1000):
             #sptime = time.time()
             mini = copy.copy(mini_p)
             maxi = copy.copy(maxi_p)
+            if len(mini) < 4 or len(maxi) < 4:
+                return None
 
             #extrapolate edges using mirroring
             lower_env_spline, upper_env_spline = create_mirrored_spline(mini, maxi, s[n, :].squeeze())
+            if lower_env_spline is None or upper_env_spline is None:
+                return None
 
             #evaluate upper and lower envelopes
             upper_env = splev(t, upper_env_spline)
@@ -115,7 +125,7 @@ def compute_mean_envelope(s, nsamps=1000):
             #esptime = time.time() - sptime
             #print '\t[%d] time for spline iteration on dimension %d: %0.6fs' % (k, n, esptime)
         ietime = time.time() - istime
-        print '\t[%d] took %0.6f seconds' % (k, ietime)
+        #print '\t[%d] took %0.6f seconds' % (k, ietime)
 
     etime = time.time() - stime
     print '%d samples took %0.6f seconds' % (nsamps, etime)
@@ -142,12 +152,16 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
     # inintialize the residual signal to the signal
     N,T = s.shape
     r = copy.copy(s)
+
     initial_energy = (s**2).mean()
     avg_envelope_energy = 0.0
     iteration = 1
     while not converged:
         # compute the mean envelope
         env = compute_mean_envelope(r, nsamps=nsamps)
+        if env is None:
+            converged = True
+            break
 
         #update the average envelope energy
         env_energy = (env**2).mean()
@@ -185,13 +199,21 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
     return r
 
 
-def memd(s, nimfs, nsamps=5000, resolution=1.0, max_iterations=30):
+def memd(s, nimfs, nsamps=100, resolution=1.0, max_iterations=30, num_noise_channels=0):
 
     imfs = list()
+    N,T = s.shape
     r = copy.copy(s)
+
+    if num_noise_channels > 0:
+        #add gaussian noise channels for Noise-assisted MEMD (2011 Rehnert and Mandic)
+        noise = np.random.randn(num_noise_channels, T)
+        r = np.vstack([r, noise])
+
     for n in range(nimfs):
         imf = sift(r, nsamps=nsamps, resolution=resolution, max_iterations=max_iterations)
         imfs.append(imf)
         r -= imf
+    imfs = np.array(imfs)
 
-    return np.array(imfs)
+    return imfs[:, :N, :]
