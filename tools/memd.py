@@ -71,14 +71,14 @@ def compute_mean_envelope(s, nsamps=1000):
     mean_env = np.zeros([N, T])
 
     #generate quasi-random points on an N-dimensional sphere
-    stime = time.time()
+    #stime = time.time()
     R = quasirand(N, nsamps, spherical=True)
-    etime = time.time() - stime
-    print 'Elapsed time for quasirand: %d seconds' % int(etime)
+    #etime = time.time() - stime
+    #print 'Elapsed time for quasirand: %d seconds' % int(etime)
 
     stime = time.time()
     for k in range(nsamps):
-        istime = time.time()
+        #istime = time.time()
         r = R[:, k].squeeze()
 
         #print 'k=%d, s.shape=%s, r.shape=%s' % (k, str(s.shape), str(r.shape))
@@ -124,7 +124,7 @@ def compute_mean_envelope(s, nsamps=1000):
             mean_env[n, :] += delta / (k+1)
             #esptime = time.time() - sptime
             #print '\t[%d] time for spline iteration on dimension %d: %0.6fs' % (k, n, esptime)
-        ietime = time.time() - istime
+        #ietime = time.time() - istime
         #print '\t[%d] took %0.6f seconds' % (k, ietime)
 
     etime = time.time() - stime
@@ -172,9 +172,13 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
         alpha = np.zeros([N])
         for k in range(N):
             a,p = pearsonr(r[k, :], env[k, :])
+            if np.isnan(a):
+                print '[iter %d] alpha=NaN for dimension %d!' % (iteration, k)
+                a = 1e-2
             alpha[k] = max(a, 1e-2)
 
         # subtract the mean envelope from the residual
+        final_alpha = alpha.mean()
         r -= alpha.mean()*env
 
         # test the residual for convergence to an IMF using stoppage criteria
@@ -183,8 +187,8 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
         #"resolution", the lower the average envelope energy, meaning that the IMF is converging.
         resolution_factor = np.log10(initial_energy / avg_envelope_energy)
 
-        print 'sift iter %d: initial_energy=%0.3f, env_energy=%0.3f, avg_envelope_energy=%0.3f, alpha.mean()=%0.6f, resolution_factor=%0.2f' % \
-              (iteration, initial_energy, env_energy, avg_envelope_energy, alpha.mean(), resolution_factor)
+        print 'sift iter %d: initial_energy=%0.3f, env_energy=%0.3f, avg_envelope_energy=%0.3f, final_alpha=%0.2f, resolution_factor=%0.2f' % \
+              (iteration, initial_energy, env_energy, avg_envelope_energy, final_alpha, resolution_factor)
 
         if resolution_factor > resolution:
             converged = True
@@ -203,6 +207,8 @@ def memd(s, nimfs, nsamps=100, resolution=1.0, max_iterations=30, num_noise_chan
 
     imfs = list()
     N,T = s.shape
+    print 'Starting MEMD: N=%d, T=%d, nimfs=%d, nsamps=%d, resolution=%0.2f, max_iterations=%d, num_noise_channels=%d' % \
+                    (N, T, nimfs, nsamps, resolution, max_iterations, num_noise_channels)
     r = copy.copy(s)
 
     if num_noise_channels > 0:

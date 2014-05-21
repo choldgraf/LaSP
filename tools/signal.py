@@ -3,6 +3,8 @@ import numpy as np
 from scipy.fftpack import fft,fftfreq,ifft
 from scipy.signal import filter_design, resample,filtfilt
 
+import matplotlib.pyplot as plt
+
 import nitime.algorithms as ntalg
 import time
 from tools.coherence import compute_mtcoherence
