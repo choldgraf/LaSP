@@ -353,3 +353,22 @@ def find_extrema(s):
     maxi = [m for m in max_env.nonzero()[0] if m != 0 and m != len(s)-1]
 
     return mini,maxi
+
+
+def another_hilbert(s):
+    """
+        An implementation of the hilbert transform for computing the analytic signal.
+    """
+
+    #take FFT
+    sfft = fft(s)
+    freq = fftfreq(len(s))
+
+    #zero out coefficients at negative frequencies
+    sfft[freq < 0.0] = np.zeros(np.sum(freq < 0.0), dtype='complex')
+    sfft[freq > 0.0] *= 2.0
+
+    #take the IFFT
+    z = ifft(sfft)
+    return z
+
