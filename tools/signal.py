@@ -372,3 +372,18 @@ def another_hilbert(s):
     z = ifft(sfft)
     return z
 
+
+def compute_instantaneous_frequency(z, sample_rate):
+    """
+        Compute the instantaneous frequency given an analytic signal z.
+    """
+    x = z.real
+    y = z.imag
+
+    dx = np.r_[0.0, np.diff(x)]*sample_rate
+    dy = np.r_[0.0, np.diff(y)]*sample_rate
+
+    f = (x*dy - y*dx) / (2*np.pi*(x**2 + y**2))
+
+    return f
+
