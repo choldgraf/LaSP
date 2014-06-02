@@ -1,5 +1,5 @@
-* What is LaSP?
-LaSP stands for - - Learning and Signal Processing- - . It's a Python wrapper some awesome machine learning and signal processing open source packages. It provides an educational environment to learn how to use these tools based on [http://www.ipython.org IPython].
+# What is LaSP?
+LaSP stands for *Learning and Signal Processing*. It provides an educational environment to learn how to use some of the awesome open source machine learning and signal processing packages out there. The tutorials are based on [IPython](http://www.ipython.org). Installation dependencies can be managed through a [virtual environment](https://virtualenv.pypa.io) to simplify your experience.
 
 The plan is to cover the following topics by Fall 2014:
 
@@ -17,18 +17,20 @@ The plan is to cover the following topics by Fall 2014:
 - Singular Value Decomosition
 - Sparse Dictionaries
 
-* TODO
+# TODO
 
-# Get virtual-environment setup documented and working automatically
-# Get setup.py filled in
-# Document ALL functions!
-# Get unit tests running from setup.py
-# Implement IPython notebook for intro to ML
+We are in the process of projectizing old code, trying to follow the best practices detailed [here](http://www.jeffknupp.com/blog/2013/08/16/open-sourcing-a-python-project-the-right-way/). Some of the steps we need to take are:
 
-* INSTALLATION
+1. Get virtual-environment setup documented and working automatically
+2. Get setup.py filled in
+3. Document ALL functions!
+4. Get unit tests running from setup.py
+5. Implement IPython notebook for intro to ML
+
+# INSTALLATION
 Coming soon!
 
-* DOCUMENTATION and TUTORIALS
+# DOCUMENTATION and TUTORIALS
 Coming soon!
 
 
