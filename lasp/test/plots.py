@@ -1,7 +1,7 @@
 import numpy as np
 
 import matplotlib.pyplot as plt
-from tools.spikes import plot_raster
+from lasp.spikes import plot_raster
 
 
 def test_plot_raster():

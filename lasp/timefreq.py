@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
-from tools.signal import lowpass_filter, bandpass_filter
+from lasp.signal import lowpass_filter, bandpass_filter
 
 
 class PowerSpectrumEstimator(object):

@@ -3,7 +3,7 @@ Generate quasi-random numbers using Halton, Hammerseley, and Sobol sequences.
 """
 import numpy as np
 
-from tools.sobol_lib import i4_sobol_generate
+from lasp.sobol_lib import i4_sobol_generate
 
 
 def quasirand(M, N, type='sobol', spherical=False):

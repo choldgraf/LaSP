@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 
 import nitime.algorithms as ntalg
 import time
-from tools.coherence import compute_mtcoherence
+from sklearn.decomposition import PCA
+from lasp.coherence import compute_mtcoherence
 
 
 def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
@@ -387,3 +388,40 @@ def compute_instantaneous_frequency(z, sample_rate):
 
     return f
 
+
+def demodulate(Z):
+    """
+        Apply demodulation (Argawal et. al 2014) to a matrix of complex-valued signals Z.
+
+        Args:
+            Z: an NxT signal matrix of N complex valued signals, each of length T
+
+        Returns:
+            phase: An NxT real-valued matrix of demodulated phases.
+            pcs: An NxN complex-valued matrix of principle components.
+    """
+
+    #do complex PCA on each IMF
+    N,T = Z.shape
+
+    #construct a matrix with the real and imaginary parts separated
+    X = np.zeros([2*N, T], dtype='float')
+    X[:N, :] = Z.real
+    X[N:, :] = Z.imag
+
+    pca = PCA()
+    pca.fit(X.T)
+
+    complex_pcs = np.zeros([N, N], dtype='complex')
+    for j in range(N):
+        pc = pca.components_[j, :]
+        complex_pcs[j, :].real = pc[:N]
+        complex_pcs[j, :].imag = pc[N:]
+
+    #compute the first PC projected component
+    proj = np.dot(Z.T.squeeze(), complex_pcs[0, :].squeeze())
+
+    #demodulate the signal
+    phase = np.angle(Z) - np.angle(proj)
+
+    return phase,complex_pcs

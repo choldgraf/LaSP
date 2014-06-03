@@ -5,7 +5,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from tools.hht import HHT
+from lasp.hht import HHT
 
 
 class TestHHT(unittest.TestCase):

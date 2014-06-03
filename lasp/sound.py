@@ -13,8 +13,8 @@ from scipy.fftpack import fft,fftfreq,fft2
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmap
-from tools.signal import lowpass_filter
-from tools.timefreq import gaussian_stft
+from lasp.signal import lowpass_filter
+from lasp.timefreq import gaussian_stft
 
 
 class WavFile():

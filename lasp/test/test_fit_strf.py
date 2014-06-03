@@ -3,10 +3,10 @@ from unittest import TestCase
 import numpy as np
 
 import matplotlib.pyplot as plt
-from tools.sound import plot_spectrogram
+from lasp.sound import plot_spectrogram
 
-from tools.fit_strf import *
-from tools.incrowd import fast_conv
+from lasp.fit_strf import *
+from lasp.incrowd import fast_conv
 
 
 class TestFitStrf(object):

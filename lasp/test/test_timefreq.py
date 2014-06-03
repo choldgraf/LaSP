@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 
 import nitime.algorithms as ntalg
 
-from tools.sound import plot_spectrogram
+from lasp.sound import plot_spectrogram
 
-from tools.timefreq import GaussianSpectrumEstimator,MultiTaperSpectrumEstimator,timefreq,AmplitudeReassignment,PhaseReassignment
+from lasp.timefreq import GaussianSpectrumEstimator,MultiTaperSpectrumEstimator,timefreq,AmplitudeReassignment,PhaseReassignment
 
 
 class TestTimeFreq(unittest.TestCase):

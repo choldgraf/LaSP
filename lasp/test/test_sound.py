@@ -1,8 +1,8 @@
 import tempfile
 import unittest
 from matplotlib import cm
-from tools.signal import gaussian_stft,mt_stft,GaussianWindowSpectrumEstimator,MultiTaperSpectrumEstimator
-from tools.sound import generate_harmonic_stack,WavFile,play_sound,generate_sine_wave,generate_simple_stack,mps,plot_mps,modulate_wave
+from lasp.signal import gaussian_stft,mt_stft,GaussianWindowSpectrumEstimator,MultiTaperSpectrumEstimator
+from lasp.sound import generate_harmonic_stack,WavFile,play_sound,generate_sine_wave,generate_simple_stack,mps,plot_mps,modulate_wave
 
 import numpy as np
 from scipy.fftpack import fft2,fftshift,fftfreq
