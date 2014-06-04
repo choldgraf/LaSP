@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 import nitime.algorithms as ntalg
 import time
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA,RandomizedPCA
 from lasp.coherence import compute_mtcoherence
 
 
@@ -389,12 +389,13 @@ def compute_instantaneous_frequency(z, sample_rate):
     return f
 
 
-def demodulate(Z):
+def demodulate(Z, over_space=True):
     """
         Apply demodulation (Argawal et. al 2014) to a matrix of complex-valued signals Z.
 
         Args:
             Z: an NxT signal matrix of N complex valued signals, each of length T
+            over_space: whether to demodulate across space (does PCA on N dimensions) or time (does PCA on T dimensions)
 
         Returns:
             phase: An NxT real-valued matrix of demodulated phases.
@@ -404,22 +405,41 @@ def demodulate(Z):
     #do complex PCA on each IMF
     N,T = Z.shape
 
-    #construct a matrix with the real and imaginary parts separated
-    X = np.zeros([2*N, T], dtype='float')
-    X[:N, :] = Z.real
-    X[N:, :] = Z.imag
+    if over_space:
 
-    pca = PCA()
-    pca.fit(X.T)
+        #construct a matrix with the real and imaginary parts separated
+        X = np.zeros([2*N, T], dtype='float')
+        X[:N, :] = Z.real
+        X[N:, :] = Z.imag
 
-    complex_pcs = np.zeros([N, N], dtype='complex')
-    for j in range(N):
-        pc = pca.components_[j, :]
-        complex_pcs[j, :].real = pc[:N]
-        complex_pcs[j, :].imag = pc[N:]
+        pca = PCA()
+        pca.fit(X.T)
 
-    #compute the first PC projected component
-    proj = np.dot(Z.T.squeeze(), complex_pcs[0, :].squeeze())
+        complex_pcs = np.zeros([N, N], dtype='complex')
+        for j in range(N):
+            pc = pca.components_[j, :]
+            complex_pcs[j, :].real = pc[:N]
+            complex_pcs[j, :].imag = pc[N:]
+
+        #compute the first PC projected component
+        proj = np.dot(Z.T.squeeze(), complex_pcs[0, :].squeeze())
+    else:
+
+        first_pc = np.zeros([T], dtype='complex')
+
+        pca_real = RandomizedPCA(n_components=1)
+        pca_real.fit(Z.real)
+        print 'pca_real.components_.shape=',pca_real.components_.shape
+        first_pc.real = pca_real.components_.squeeze()
+        
+        pca_imag = RandomizedPCA(n_components=1)
+        pca_imag.fit(Z.imag)
+        print 'pca_imag.components_.shape=',pca_imag.components_.shape
+        first_pc.imag = pca_imag.components_.squeeze()
+
+        complex_pcs = np.array([first_pc])
+
+        proj = first_pc
 
     #demodulate the signal
     phase = np.angle(Z) - np.angle(proj)
