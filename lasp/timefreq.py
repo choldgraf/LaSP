@@ -4,6 +4,7 @@ from abc import ABCMeta,abstractmethod
 import copy
 
 import numpy as np
+import pandas as pd
 
 from scipy.fftpack import fft,fftfreq
 from scipy.signal import hilbert
@@ -14,6 +15,8 @@ import matplotlib.pyplot as plt
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
 from lasp.signal import lowpass_filter, bandpass_filter
+
+from brian import hears, Hz
 
 
 class PowerSpectrumEstimator(object):
@@ -85,7 +88,7 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         NW = max(1, int((slen / sample_rate)*self.bandwidth))
         K = 2*NW - 1
 
-        tapers,eigs = ntalg.dpss_windows(slen, NW, K)
+        tapers, eigs = ntalg.dpss_windows(slen, NW, K)
         ntapers = len(tapers)
         if debug:
             print '[MultiTaperSpectrumEstimator.estimate] slen=%d, NW=%d, K=%d, bandwidth=%0.1f, ntapers: %d' % (slen, NW, K, self.bandwidth, ntapers)
@@ -226,12 +229,15 @@ def generate_sliding_windows(N, sample_rate, increment, window_length):
     return t, np.array(windows)
 
 
-def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0, max_freq=None, nstd=6):
+def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0,
+                  max_freq=None, nstd=6):
     spectrum_estimator = GaussianSpectrumEstimator(nstd=nstd)
-    t,freq,tf = timefreq(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
+    t, freq, tf = timefreq(s, sample_rate, window_length, increment,
+                           spectrum_estimator=spectrum_estimator,
+                           min_freq=min_freq, max_freq=max_freq)
     ps = np.abs(tf)
     rms = ps.sum(axis=0)
-    return t,freq,tf,rms
+    return t, freq, tf, rms
 
 
 def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0, max_freq=None, adaptive=True, jackknife=False):
@@ -467,3 +473,96 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
         tf_mean *= sigmoid_mask
 
     return t_smallest, f_smallest, tf_mean
+
+
+def define_f_bands(stt=180, stp=7000, n_bands=32, kind='log'):
+    '''
+    Defines log-spaced frequency bands...generally this is for auditory
+    spectrogram extraction. Brian used 180 - 7000 Hz, so for now those
+    are the defaults.
+
+    INPUTS
+    --------
+        stt : int
+            The starting frequency
+        stp : int
+            The end frequency
+        n_bands : int
+            The number of bands to calculate
+        kind : string, ['log', 'erb']
+            What kind of spacing will we use for the frequency bands.
+    '''
+    if kind == 'log':
+        aud_fs = np.logspace(np.log10(stt), np.log10(stp), n_bands).astype(int)
+    elif kind == 'erb':
+        aud_fs = hears.erbspace(stt*Hz, stp*Hz, n_bands)
+    else:
+        raise NameError("I don't know what kind of spacing that is")
+    return aud_fs
+
+
+def extract_nsl_spectrogram(sig, Fs, cfs):
+    '''Implements a version of the "wav2aud" function in the NSL toolbox.
+    Uses Brian hears to chain most of the computations to be done online.
+
+    This is effectively what it does:
+        1. Gammatone filterbank at provided cfs (erbspace recommended)
+        2. Half-wave rectification
+        3. Low-pass filtering at 2Khz
+        4. First-order derivative across frequencies (basically just
+            taking the diff of successive frequencies to sharpen output)
+        5. Half-wave rectification #2
+        6. An exponentially-decaying average, with time constant chosen
+            to be similar to that reported in the NSL toolbox (8ms)
+
+    INPUTS
+    --------
+    sig : array
+        The auditory signals we'll use to extract. Should be time x feats, or 1-d
+    Fs : float, int
+        The sampling rate of the signal
+    cfs : list of floats, ints
+        The center frequencies that we'll use for initial filtering.
+
+    OUTPUTS
+    --------
+    out : array, [tpts, len(cfs)]
+        The auditory spectrogram of the signal
+    '''
+    Fs = float(Fs)*Hz
+    snd = hears.Sound(sig, samplerate=Fs)
+
+    # Cochlear model
+    snd_filt = hears.Gammatone(snd, cfs)
+
+    # Hair cell stages
+    clp = lambda x: np.clip(x, 0, np.inf)
+    snd_hwr = hears.FunctionFilterbank(snd_filt, clp)
+    snd_lpf = hears.LowPass(snd_hwr, 2000)
+
+    # Lateral inhibitory network
+    rands = lambda x: sigp.roll_and_subtract(x, hwr=True)
+    snd_lin = hears.FunctionFilterbank(snd_lpf, rands)
+
+    # Initial processing
+    out = snd_lin.process()
+
+    # Time integration.
+    # Time constant is 8ms, which we approximate with halfwidth of 12
+    half_pt = (12. / 1000) * Fs
+    out = pd.stats.moments.ewma(out, halflife=half_pt)
+    return out
+
+
+def roll_and_subtract(sig, amt=1, axis=1, hwr=False):
+    '''Rolls the input matrix along the specifies axis, then
+    subtracts this from the original signal. This is meant to
+    be similar to the lateral inhibitory network from Shamma's
+    NSL toolbox. hwr specifies whether to include a half-wave
+    rectification after doing the subtraction.'''
+    diff = np.roll(sig, -amt, axis=axis)
+    diff[:, -amt:] = 0
+    diff = np.subtract(sig, diff)
+    if hwr is True:
+        diff = np.clip(diff, 0, np.inf)
+    return diff
