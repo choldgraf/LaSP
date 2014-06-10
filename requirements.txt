@@ -6,3 +6,5 @@ h5py
 nitime
 spams
 brian
+pandas
+

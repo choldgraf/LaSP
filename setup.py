@@ -13,6 +13,7 @@ setup(
                       'h5py',
                       'nitime',
                       'spams',
-                      'brian'
+                      'brian',
+                      'pandas'
         ]
 )
