@@ -59,7 +59,7 @@ def create_network(num_neurons, num_input_features, spectral_radius=1.0, nonline
         weights.imag = wmags*np.sin(wphase)
 
         #rescale weights
-        weights /= np.max(np.sqrt(weights.real**2 + weights.imag**2))
+        #weights /= np.max(np.sqrt(weights.real**2 + weights.imag**2))
 
         #set weights in the connection matrix
         W[k, indices[:nconnections]] = weights
@@ -251,7 +251,7 @@ def nonlinearity_movie(N, T, temp_dir='/tmp',
             u.real = 0.0
             u.imag = 0.0
 
-        a = np.dot(W, z) + b + np.dot(u*Win, u)
+        a = np.dot(W, z) + b + np.dot(Win, u)
         z = f(a)
 
     fps = 10
@@ -265,4 +265,4 @@ def nonlinearity_movie(N, T, temp_dir='/tmp',
 if __name__ == '__main__':
 
     np.random.seed(123456)
-    nonlinearity_movie(50, 1500, temp_dir='/tmp/complex', nonlinearity='none', bias_std=0.25)
+    nonlinearity_movie(100, 1000, temp_dir='/tmp/complex', nonlinearity='none', bias_std=1e-2)
