@@ -262,6 +262,46 @@ def nonlinearity_movie(N, T, temp_dir='/tmp',
     print cmd
     os.system(cmd)
 
+
+class ComplexMultinomialClassifier(object):
+    """A scikits.learn style classifier that takes complex valued input and finds complex-valued weights for a
+        multinomial classifier.
+    """
+
+    def __init__(self):
+        pass
+
+    def fit(self, X, y):
+        """Fit the complex multinomial classifier using gradient descent.
+
+        :param X: A complex matrix of size n_samples X n_features
+        :param y: An integer valued matrix of labels of length n_samples
+        :return:
+        """
+
+        unique_labels = np.unique(y)
+        unique_labels.sort()
+        K = len(unique_labels)
+
+        N,M = X.shape
+        assert len(y) == N
+
+        self.coef_ = np.zeros([M, K])
+
+    def grad(self, X, y):
+
+        N,M = X.shape
+        unique_labels = np.unique(y)
+        K = self.coef_.shape[1]
+
+        #initialize gradient
+        dW = np.zeros([M, K], dtype='complex')
+
+        for lbl in unique_labels:
+            #get indices for points with this label
+            index = y == lbl
+
+
 if __name__ == '__main__':
 
     np.random.seed(123456)
