@@ -1,3 +1,4 @@
+import copy
 import os
 import husl
 import numpy as np
@@ -128,11 +129,11 @@ def make_phase_image(amp, phase):
     return img
 
 
-def nonlinearity_movie(N, T, temp_dir='/tmp',
-                       spectral_radius=1.0, nonlinearity='tanh',
-                       connection_probability=0.10, lowest_weight=0.01,
-                       weight_distribution='truncnorm',
-                       bias_mean=0.0, bias_std=1.0, input_connection_probability=0.10):
+def network_movie(N, T, temp_dir='/tmp',
+                  spectral_radius=1.0, nonlinearity='tanh',
+                  connection_probability=0.10, lowest_weight=0.01,
+                  weight_distribution='truncnorm',
+                  bias_mean=0.0, bias_std=1.0, input_connection_probability=0.10):
     """ Makes a movie of how a set of complex values are changed on the plane by applying an elementwise
         output nonlinearity.
 
@@ -268,8 +269,12 @@ class ComplexMultinomialClassifier(object):
         multinomial classifier.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, num_classes):
+        self.K = num_classes
+
+    def set_label_order(self, y):
+        self.label_order = range(self.K)
+        self.label2index = {lbl:j for j,lbl in enumerate(self.label_order)}
 
     def fit(self, X, y):
         """Fit the complex multinomial classifier using gradient descent.
@@ -279,30 +284,111 @@ class ComplexMultinomialClassifier(object):
         :return:
         """
 
-        unique_labels = np.unique(y)
-        unique_labels.sort()
-        K = len(unique_labels)
+        self.K = len(self.label_order)
+
+        self.N,self.M = X.shape
+        assert len(y) == self.N
+
+        self.coef_ = np.zeros([self.M, self.K])
+
+    def compute_P(self, X, W):
+        """Compute the conditional probability of each data point, produces a NxK matrix,
+            where P[i,j] = P(Y[i] == j | X[i, :], W)
+
+        :param X: NxM complex valued data matrix, N samples, M features
+        :param y: N dimensional integer-valued label vector, where len(unique(y)) == K
+        :param W: MxK complex-valued weight matrix, K different classes
+        :return:
+        """
+
+        #get real part of matrix multiplication between X and W, which is an NxK matrix representing the dot product
+        #between each of the N data points and the weights of each of the K output neurons
+        R = np.dot(X, W).real
+
+        #exponentiate R, making it the numerator of the softmax function
+        expR = np.exp(R)
+
+        #compute the conditional probability of each data point, produces a NxK matrix, where
+        # P[i,j] = P(Y[i] != j | X[i, :], W), using the event Y[i] != j instead of Y[i] == j
+        #because we need that quantity to compute the gradient later
+        P = 1.0 - (expR.T / expR.sum(axis=1)).T
+
+        #clean up
+        del R
+        del expR
+
+        return P
+
+    def log_likelihood(self, X, y, W):
 
         N,M = X.shape
-        assert len(y) == N
 
-        self.coef_ = np.zeros([M, K])
+        #get real part of matrix multiplication between X and W, which is an NxK matrix representing the dot product
+        #between each of the N data points and the weights of each of the K output neurons
+        R = np.dot(X, W).real
 
-    def grad(self, X, y):
+        #exponentiate R, sum across columns to produce the denominator of the softmax function for each data point
+        d = np.exp(R).sum(axis=1)
+
+        #grab the dot product corresponding to each Y[i]
+        dp = np.zeros([N])
+        for i,lbl in enumerate(y):
+            dp[i] = R[i, self.label2index[lbl]]
+
+        #compute the log likelihood
+        ll = (dp - np.log(d)).sum()
+
+        return -ll
+
+    def grad(self, X, y, W):
+
+        notP = 1.0 - self.compute_P(X, W)
+
+        #initialize an empty gradient
+        dW = np.zeros([self.M, self.K], dtype='complex')
+
+        #compute each column of the gradient individually
+        for j,lbl in enumerate(self.label_order):
+            data_index = y == lbl
+            dW[:, j].real = (X[data_index, :].real.T * notP[data_index, j]).sum(axis=1)
+            dW[:, j].imag = ( X[data_index, :].imag.T * notP[data_index, j] * -1.0).sum(axis=1)
+
+        return -dW
+
+    def grad_fd(self, X, y, W, eps=1e-6):
+        """ Compute a finite-difference approximation to the gradient.
+        :param X: an NxM complex-valued matrix of data, with N samples and M features
+        :param y: an N dimensional integer valued vector of labels
+        :param W: A 2xMxK matrix of real-valued derivatives. The last dimension represents perturbations to the
+                real and imaginary components of the weights, respectively.
+        :return:
+        """
 
         N,M = X.shape
-        unique_labels = np.unique(y)
-        K = self.coef_.shape[1]
+        assert W.shape[0] == M
+        K = W.shape[1]
 
-        #initialize gradient
+        ll = self.log_likelihood(X, y, W)
+
         dW = np.zeros([M, K], dtype='complex')
+        for m in range(M):
+            for k in range(K):
+                Wx = copy.copy(W)
+                Wx[m, k] += complex(1e-6, 0.0)
+                real_part = (self.log_likelihood(X, y, Wx) - ll) / eps
+                del Wx
 
-        for lbl in unique_labels:
-            #get indices for points with this label
-            index = y == lbl
+                Wy = copy.copy(W)
+                Wy[m, k] += complex(0.0, 1e-6)
+                imag_part = (self.log_likelihood(X, y, Wy) - ll) / eps
+                del Wy
+
+                dW[m, k] = complex(real_part, imag_part)
+
+        return dW
 
 
 if __name__ == '__main__':
 
     np.random.seed(123456)
-    nonlinearity_movie(100, 1000, temp_dir='/tmp/complex', nonlinearity='none', bias_std=1e-2)
+    network_movie(100, 1000, temp_dir='/tmp/complex', nonlinearity='none', bias_std=1e-2)
