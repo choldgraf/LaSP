@@ -8,17 +8,23 @@ import matplotlib.pyplot as plt
 from stats import compute_R2
 
 
-def multi_plot(data_list, plot_func, title=None, nrows=4, ncols=5):
+def multi_plot(data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None, output_pattern=None):
 
     nsp = 0
     fig = None
+    fig_num = 0
     plots_per_page = nrows*ncols
     for pdata in data_list:
         if nsp % plots_per_page == 0:
-            fig = plt.figure()
+            if output_pattern is not None and fig is not None:
+                #save the current figure
+                ofile = output_pattern % fig_num
+                plt.savefig(ofile)
+            fig = plt.figure(figsize=figsize)
+            fig_num += 1
             fig.subplots_adjust(top=0.95, bottom=0.02, right=0.97, left=0.03, hspace=0.20)
             if title is not None:
-                plt.suptitle(title)
+                plt.suptitle(title + (" (%d)" % fig_num))
 
         nsp += 1
         sp = nsp % plots_per_page
