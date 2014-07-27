@@ -1,5 +1,6 @@
 import copy
 import operator
+import husl
 
 import numpy as np
 
@@ -163,3 +164,28 @@ def whist(x, **kwds):
 def plot_confusion_matrix_single(pdata, ax):
     plt.imshow(pdata['cmat'], interpolation='nearest', aspect='auto', origin='upper', vmin=0, vmax=1)
     plt.title('p=%0.3f' % pdata['p'])
+
+
+def make_phase_image(amp, phase):
+    """
+        Turns a phase matrix into an image to be plotted with imshow.
+    """
+
+    nelectrodes,d = amp.shape
+    max_amp = np.percentile(amp, 97)
+
+    img = np.zeros([nelectrodes, d, 4], dtype='float32')
+
+    #set the alpha and color for the bins
+    alpha = amp / max_amp
+    alpha[alpha > 1.0] = 1.0 #saturate
+    alpha[alpha < 0.05] = 0.0 #nonlinear threshold
+
+    cnorm = ((180.0 / np.pi) * phase).astype('int')
+    for j in range(nelectrodes):
+        for ti in range(d):
+            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 75.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
+
+    img[:, :, 3] = alpha
+
+    return img
