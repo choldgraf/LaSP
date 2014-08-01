@@ -34,7 +34,7 @@ def multi_plot(data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None,
         plot_func(pdata, ax)
 
     #save last figure
-    if fig is not None:
+    if fig is not None and output_pattern is not None:
         ofile = output_pattern % fig_num
         plt.savefig(ofile)
         plt.close('all')
