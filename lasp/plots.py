@@ -21,6 +21,7 @@ def multi_plot(data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None,
                 #save the current figure
                 ofile = output_pattern % fig_num
                 plt.savefig(ofile)
+                plt.close('all')
             fig = plt.figure(figsize=figsize)
             fig_num += 1
             fig.subplots_adjust(top=0.95, bottom=0.02, right=0.97, left=0.03, hspace=0.20)
@@ -31,6 +32,12 @@ def multi_plot(data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None,
         sp = nsp % plots_per_page
         ax = fig.add_subplot(nrows, ncols, sp)
         plot_func(pdata, ax)
+
+    #save last figure
+    if fig is not None:
+        ofile = output_pattern % fig_num
+        plt.savefig(ofile)
+        plt.close('all')
 
 
 def plot_pairwise_analysis(data_mat, feature_columns, dependent_column, column_names):
