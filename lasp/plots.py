@@ -9,12 +9,31 @@ import matplotlib.pyplot as plt
 from stats import compute_R2
 
 
-def multi_plot(data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None, output_pattern=None):
+def multi_plot(the_data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None, output_pattern=None, transpose=False):
 
     nsp = 0
     fig = None
     fig_num = 0
     plots_per_page = nrows*ncols
+
+    data_list = the_data_list
+    overflow_index = 0
+    if transpose:
+        data_list = [None]*len(data_list)
+        for k in range(len(the_data_list)):
+            page_offset = int(float(k) / plots_per_page)*plots_per_page
+            if len(the_data_list) - page_offset < plots_per_page:
+                new_index = page_offset + overflow_index
+                overflow_index += 1
+            else:
+                sp = k % plots_per_page
+                row = sp % nrows
+                col = int(float(sp) / nrows)
+                new_index = page_offset + row*ncols + col
+            print 'nsp=%d, k=%d, sp=%d, page_offset=%d, row=%d, col=%d, new_index=%d' % \
+                  (len(the_data_list), k, sp, page_offset, row, col, new_index)
+            data_list[new_index] = the_data_list[k]
+
     for pdata in data_list:
         if nsp % plots_per_page == 0:
             if output_pattern is not None and fig is not None:
