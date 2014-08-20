@@ -210,8 +210,37 @@ def make_phase_image(amp, phase):
     cnorm = ((180.0 / np.pi) * phase).astype('int')
     for j in range(nelectrodes):
         for ti in range(d):
-            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 75.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
+            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 99.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
 
     img[:, :, 3] = alpha
 
     return img
+
+
+def draw_husl_circle():
+    """ Draw an awesome circle whose angle is colored using the HUSL color space. The HUSL color space is circular, so
+        it's useful for plotting phase. This figure could serve as a "color circle" as opposed to a color bar.
+    """
+
+    #generate a bunch of points on the circle
+    theta = np.arange(0.0, 2*np.pi, 1e-3)
+
+    plt.figure()
+
+    radii = np.arange(0.75, 1.0, 1e-2)
+    for t in theta:
+        x = radii*np.cos(t)
+        y = radii*np.sin(t)
+
+        a = (180.0/np.pi)*t
+        c = husl.husl_to_rgb(a, 99.0, 50.0)
+        plt.plot(x, y, c=c)
+    plt.xlim(-1.25, 1.25)
+    plt.ylim(-1.25, 1.25)
+
+    plt.show()
+
+if __name__ == '__main__':
+
+    draw_husl_circle()
+

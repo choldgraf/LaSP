@@ -122,7 +122,8 @@ def make_phase_image(amp, phase):
     cnorm = ((180.0 / np.pi) * phase).astype('int')
     for j in range(nx):
         for ti in range(ny):
-            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 75.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
+            #img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 75.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
+            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 100.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
 
     img[:, :, 3] = alpha
 
