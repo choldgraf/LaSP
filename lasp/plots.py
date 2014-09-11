@@ -192,20 +192,24 @@ def plot_confusion_matrix_single(pdata, ax):
     plt.title('p=%0.3f' % pdata['p'])
 
 
-def make_phase_image(amp, phase):
+def make_phase_image(amp, phase, normalize=True, saturate=True, threshold=True):
     """
         Turns a phase matrix into an image to be plotted with imshow.
     """
 
     nelectrodes,d = amp.shape
-    max_amp = np.percentile(amp, 97)
+    alpha = amp
+    if normalize:
+        max_amp = np.percentile(amp, 97)
+        alpha = alpha / max_amp
 
     img = np.zeros([nelectrodes, d, 4], dtype='float32')
 
     #set the alpha and color for the bins
-    alpha = amp / max_amp
-    alpha[alpha > 1.0] = 1.0 #saturate
-    alpha[alpha < 0.05] = 0.0 #nonlinear threshold
+    if saturate:
+        alpha[alpha > 1.0] = 1.0 #saturate
+    if threshold:
+        alpha[alpha < 0.05] = 0.0 #nonlinear threshold
 
     cnorm = ((180.0 / np.pi) * phase).astype('int')
     for j in range(nelectrodes):
