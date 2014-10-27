@@ -389,13 +389,14 @@ def compute_instantaneous_frequency(z, sample_rate):
     return f
 
 
-def demodulate(Z, over_space=True):
+def demodulate(Z, over_space=True, depth=1):
     """
         Apply demodulation (Argawal et. al 2014) to a matrix of complex-valued signals Z.
 
         Args:
             Z: an NxT signal matrix of N complex valued signals, each of length T
             over_space: whether to demodulate across space (does PCA on N dimensions) or time (does PCA on T dimensions)
+            depth: how many PCA projection phases to subtract off
 
         Returns:
             phase: An NxT real-valued matrix of demodulated phases.
@@ -421,8 +422,12 @@ def demodulate(Z, over_space=True):
             complex_pcs[j, :].real = pc[:N]
             complex_pcs[j, :].imag = pc[N:]
 
-        #compute the first PC projected component
-        proj = np.dot(Z.T.squeeze(), complex_pcs[0, :].squeeze())
+        phase = np.angle(Z)
+        for k in range(depth):
+            #compute the kth PC projected component
+            proj = np.dot(Z.T.squeeze(), complex_pcs[k, :].squeeze())
+            phase -= np.angle(proj)
+
     else:
 
         first_pc = np.zeros([T], dtype='complex')
@@ -441,7 +446,7 @@ def demodulate(Z, over_space=True):
 
         proj = first_pc
 
-    #demodulate the signal
-    phase = np.angle(Z) - np.angle(proj)
+        #demodulate the signal
+        phase = np.angle(Z) - np.angle(proj)
 
     return phase,complex_pcs

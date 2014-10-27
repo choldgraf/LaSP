@@ -200,7 +200,7 @@ def make_phase_image(amp, phase, normalize=True, saturate=True, threshold=True):
     nelectrodes,d = amp.shape
     alpha = amp
     if normalize:
-        max_amp = np.percentile(amp, 97)
+        max_amp = np.percentile(amp, 98)
         alpha = alpha / max_amp
 
     img = np.zeros([nelectrodes, d, 4], dtype='float32')
