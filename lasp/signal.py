@@ -1,5 +1,6 @@
 import numpy as np
-
+import mne
+import pandas as pd
 from scipy.fftpack import fft,fftfreq,ifft
 from scipy.signal import filter_design, resample,filtfilt
 
@@ -450,3 +451,56 @@ def demodulate(Z, over_space=True, depth=1):
         phase = np.angle(Z) - np.angle(proj)
 
     return phase,complex_pcs
+
+
+def compute_coherence_over_time(signal, trials, Fs, n_perm=5, low=0, high=300):
+    '''
+    Computes the coherence between the mean of subsets of trails. This can be used
+    to assess signal stability in response to a stimulus (repeated or otherwise).
+
+    INPUTS
+    --------
+    signal : array-like
+        The array of neural signals. Should be time x signals
+
+    trials : pd.DataFrame, contains columns 'epoch', and 'time'
+             and same first dimension as signal
+        A dataframe with time indices and trial number within each epoch (trial)
+        This is used to pull out the corresponding timepoints from signal.
+
+    Fs : int
+        The sampling rate of the signal
+
+    OUTPUTS
+    --------
+    coh_perm : np.array, shape (n_perms, n_signals, n_freqs)
+        A collection of coherence values for each permutation.
+
+    coh_freqs : np.array, shape (n_freqs)
+        The frequency values corresponding to the final dimension of coh_perm
+    Output is permutations x signals x frequency bands
+    '''
+    trials = pd.DataFrame(trials)
+    assert ('epoch' in trials.columns and 'time' in trials.columns), 'trials must be a DataFrame with "epoch" column'
+    n_trials = np.max(trials['epoch'])
+
+    coh_perm = []
+    for perm in xrange(n_perm):
+        trial_ixs = np.random.permutation(np.arange(n_trials))
+        t1 = trial_ixs[:n_trials/2]
+        t2 = trial_ixs[n_trials/2:]
+        
+        # Split up trials and take the mean of each
+        mn1, mn2 = [signal[trials.eval('epoch in @t_ix and time > 0').values].mean(level=('time'))
+                    for t_ix in [t1, t2]]
+
+        # Now compute coherence between the two
+        coh_all_freqs = []
+        for (elec, vals1), (_, vals2) in zip(mn1.iteritems(), mn2.iteritems()):
+            ts_arr = np.vstack([vals1, vals2])
+            coh, coh_freqs, coh_times, n_epochs, n_tapers = mne.connectivity.spectral_connectivity(ts_arr[None, :, :], sfreq=Fs,
+                                                                                                   fmin=low, fmax=high, verbose=0)
+            coh_all_freqs.append(coh[1, 0, :])
+        coh_perm.append(coh_all_freqs)
+    coh_perm = np.array(coh_perm)
+    return coh_perm, coh_freqs
