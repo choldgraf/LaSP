@@ -506,7 +506,7 @@ def compute_coherence_over_time(signal, trials, Fs, n_perm=5, low=0, high=300):
     return coh_perm, coh_freqs
 
 
-def segment_envelope(s, threshold_percentile=10):
+def segment_envelope(s, threshold_fraction=0.10):
     """ Segments a one dimensional positive-valued time series into events with start and end times.
 
     :param s: The signal, a numpy array.
@@ -515,8 +515,8 @@ def segment_envelope(s, threshold_percentile=10):
 
     assert np.sum(s < 0) == 0, "segment_envelope: Can't segment a signal that has negative values!"
 
-    #determine threshold to be the 10th percentile
-    thresh = np.percentile(s[s > 0], threshold_percentile)
+    #determine threshold as some percentile of the nonzero amplitude distribution
+    thresh = s.max()*threshold_fraction
     print 'thresh=%f' % thresh
 
     #array to keep track of start and end times of each event
