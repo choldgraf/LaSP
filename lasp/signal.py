@@ -504,3 +504,46 @@ def compute_coherence_over_time(signal, trials, Fs, n_perm=5, low=0, high=300):
         coh_perm.append(coh_all_freqs)
     coh_perm = np.array(coh_perm)
     return coh_perm, coh_freqs
+
+
+def segment_envelope(s, threshold_percentile=10):
+    """ Segments a one dimensional positive-valued time series into events with start and end times.
+
+    :param s: The signal, a numpy array.
+    :return: A list of event start and end times, and the maximum amplitude encountered in that event.
+    """
+
+    assert np.sum(s < 0) == 0, "segment_envelope: Can't segment a signal that has negative values!"
+
+    #determine threshold to be the 10th percentile
+    thresh = np.percentile(s[s > 0], threshold_percentile)
+    print 'thresh=%f' % thresh
+
+    #array to keep track of start and end times of each event
+    events = list()
+
+    #scan through the signal, find events
+    in_event = False
+    max_amp = -np.inf
+    start_index = -1
+    for t,x in enumerate(s):
+
+        if in_event:
+            if x > max_amp:
+                #we found a new peak
+                max_amp = x
+            if x < thresh:
+                #the event has ended
+                in_event = False
+                events.append( (start_index, t, max_amp))
+                #print 'Identified event (%d, %d, %0.6f)' % (start_index, t, max_amp)
+        else:
+            if x > thresh:
+                in_event = True
+                start_index = t
+                max_amp = thresh
+
+    print '# of events: %d' % len(events)
+    #TODO: merge small adjacent events, break down long events
+
+    return np.array(events)
