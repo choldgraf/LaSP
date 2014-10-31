@@ -180,7 +180,8 @@ def create_random_psth(duration, smooth_win_size=10, samp_rate=1000.0, thresh=0.
     return psth
 
 
-def plot_raster(spike_trains, ax=None, duration=None, bin_size=0.001, time_offset=0.0, ylabel='Trial #', groups=None):
+def plot_raster(spike_trains, ax=None, duration=None, bin_size=0.001, time_offset=0.0, ylabel='Trial #', groups=None,
+                bgcolor=None, spike_color='k'):
     """
         Make a raster plot of the trials of spike times.
 
@@ -194,6 +195,9 @@ def plot_raster(spike_trains, ax=None, duration=None, bin_size=0.001, time_offse
 
     if ax is None:
         ax = plt.gca()
+
+    if bgcolor is not None:
+        ax.set_axis_bgcolor(bgcolor)
 
     if duration is None:
         duration = -np.inf
@@ -217,7 +221,7 @@ def plot_raster(spike_trains, ax=None, duration=None, bin_size=0.001, time_offse
             if real_index % 2:
                 max_trial = max(trial_indicies)
                 y = len(spike_trains) - max_trial - 1
-                x = 0
+                x = 0.0 + time_offset
                 h = len(trial_indicies)
                 w = nbins
                 rect = Rectangle( (x, y), width=w, height=h, fill=True, alpha=0.5, facecolor='#aaaaaa', linewidth=0.0)
@@ -229,24 +233,14 @@ def plot_raster(spike_trains, ax=None, duration=None, bin_size=0.001, time_offse
             continue
         for st in trial:
             y = len(spike_trains) - k - 1
-            x = int((st - time_offset) / bin_size)
-            rect = Rectangle( (x, y), width=1, height=1, linewidth=1.0, facecolor='#000000')
+            x = st
+            rect = Rectangle( (x, y), width=bin_size, height=1, linewidth=1.0, facecolor=spike_color, edgecolor=spike_color)
             ax.add_patch(rect)
 
     #change x axis tick marks to reflect actual time
     ax.autoscale_view()
-    ax.set_xlim(0.0, nbins)
+    ax.set_xlim(time_offset, time_offset+duration)
     ax.figure.canvas.draw()
-    xt_oldlabels = [x.get_text() for x in ax.get_xticklabels()]
-    xt_newlabels = []
-    for xtl in xt_oldlabels:
-        try:
-            xt = (float(xtl) * bin_size) + time_offset
-            xt_nl = '%0.1f' % xt
-        except:
-            xt_nl = ''
-        xt_newlabels.append(xt_nl)
-    ax.set_xticklabels(xt_newlabels)
 
     if groups is None:
         #change y axis tick labels to reflect trial number
@@ -268,7 +262,6 @@ def plot_raster(spike_trains, ax=None, duration=None, bin_size=0.001, time_offse
     if ylabel is not None:
         ax.set_ylabel(ylabel)
     ax.set_xlabel('Time (s)')
-    plt.axis('tight')
 
 
 def xcorr_hist(spike_train1, spike_train2, duration=None, window_size=0.001, sample_rate=1000.0, normalize=True):

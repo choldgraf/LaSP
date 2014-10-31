@@ -202,7 +202,7 @@ def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_
 
     increment = 1.0 / spec_sample_rate
     window_length = nstd / (2.0*np.pi*freq_spacing)
-    t,freq,timefreq = gaussian_stft(s, sample_rate, window_length, increment, nstd=nstd, min_freq=min_freq, max_freq=max_freq)
+    t,freq,timefreq,rms = gaussian_stft(s, sample_rate, window_length, increment, nstd=nstd, min_freq=min_freq, max_freq=max_freq)
 
     if log:
         #create log spectrogram (power in decibels)
