@@ -1,3 +1,4 @@
+from scipy.ndimage import convolve1d
 from scipy.stats import gamma
 from matplotlib.patches import Rectangle
 
@@ -308,3 +309,42 @@ def xcorr_hist(spike_train1, spike_train2, duration=None, window_size=0.001, sam
 
     t = np.arange(nbins)*(1.0 / sample_rate)
     return t,xhist,clow,chigh
+
+
+def spike_envelope(spike_trains, start_time, duration, bin_size=1e-3, win_size=3.0, thresh_percentile=None):
+
+    #construct empty envelope
+    tlen = int(duration / bin_size)
+    env = np.zeros([tlen])
+
+    #sum spike trains across electrodes
+    for st in spike_trains:
+
+        #some basic checks
+        assert np.sum(st < start_time) == 0, "spike_envelope: %d spike times occurred before the start time of %0.6fs" % (np.sum(st < start_time), start_time)
+        assert np.sum(st > start_time+duration) == 0, "spike_envelope: %d spike times occurred after the end time of %0.6fs" % (np.sum(st > start_time+duration), start_time+duration)
+
+        #convert spike times to indices
+        sindex = ((st - start_time) / bin_size).astype('int')
+
+        #increment spike count vector
+        env[sindex] += 1
+
+    #smooth the spike count vector with a gaussian
+    sct = np.linspace(-50, 50, 30)
+    scwin = np.exp(-(sct**2 / win_size**2))
+    env = convolve1d(env, scwin)
+
+    #normalize the envelope
+    env /= env.max()
+
+    assert np.sum(env < 0.0) == 0, "Why are there zeros in the spike envelope?"
+
+    if thresh_percentile is not None:
+        thresh = np.percentile(env, thresh_percentile)
+        print 'spike_envelope threshold: %f' % thresh
+        env[env < thresh] = 0.0
+
+
+    return env
+

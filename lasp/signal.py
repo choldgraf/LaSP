@@ -517,7 +517,7 @@ def segment_envelope(s, threshold_fraction=0.10):
 
     #determine threshold as some percentile of the nonzero amplitude distribution
     thresh = s.max()*threshold_fraction
-    print 'thresh=%f' % thresh
+    print 'segment_envelope: thresh=%f' % thresh
 
     #array to keep track of start and end times of each event
     events = list()
@@ -532,7 +532,7 @@ def segment_envelope(s, threshold_fraction=0.10):
             if x > max_amp:
                 #we found a new peak
                 max_amp = x
-            if x < thresh:
+            if x <= thresh:
                 #the event has ended
                 in_event = False
                 events.append( (start_index, t, max_amp))
@@ -547,3 +547,27 @@ def segment_envelope(s, threshold_fraction=0.10):
     #TODO: merge small adjacent events, break down long events
 
     return np.array(events)
+
+
+def power_amplifier(s, thresh, pwr=2):
+    """ Amplify elements of a positive-valued signal. Rescale the signal
+        so that elements above thresh are equal to or greater than 1,
+        and elements below thresh are less than one. Then take a power
+        of the signal, which will supress values less than 1, and amplify
+        values that are greater than one.
+    """
+
+    #normalize the signal
+    s /= s.max()
+
+    #shift the signal so elements at the threshold are set to 1
+    s += 1.0 - thresh
+
+    #raise the envelope to a power, amplifying values that are above 1
+    s = s**pwr
+
+    #re-normalize
+    s -= (1.0 - thresh)**pwr
+    s /= s.max()
+
+    return s
