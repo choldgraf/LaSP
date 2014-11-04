@@ -348,3 +348,24 @@ def spike_envelope(spike_trains, start_time, duration, bin_size=1e-3, win_size=3
 
     return env
 
+
+def spike_trains_to_matrix(spike_trains, bin_size, start_time, duration):
+    """ Convert an array of spike time arrays to a matrix of counts.
+
+    :param spike_trains: An array of arrays of spike times.
+    :param bin_size: The bin size of each matrix pixel.
+    :param start_time: The start time of the matrix.
+    :param duration: The duration of the matrix.
+    :return: A matrix of spike counts, one row per each array in the spike_trains array.
+    """
+
+    nt = int(duration / bin_size)
+    spike_count = np.zeros([len(spike_trains), nt])
+    for k, spikes in enumerate(spike_trains):
+        vi = (spikes >= start_time) & (spikes < start_time+duration)
+        # convert the spike times into integer indices in spike_count
+        spikes_index = ((spikes[vi] - start_time) / bin_size).astype('int')
+        #increment each bin by the number of spikes that lie in it
+        for si in spikes_index:
+            spike_count[k, si] += 1.0
+    return spike_count

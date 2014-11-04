@@ -506,18 +506,19 @@ def compute_coherence_over_time(signal, trials, Fs, n_perm=5, low=0, high=300):
     return coh_perm, coh_freqs
 
 
-def segment_envelope(s, threshold_fraction=0.10):
+def break_envelope_into_events(s, threshold=0, merge_thresh=None):
     """ Segments a one dimensional positive-valued time series into events with start and end times.
 
     :param s: The signal, a numpy array.
+    :param threshold: The threshold for determining the onset of an event. When the amplitude of s
+            exceeds threshold, an event starts, and when the amplitude of the signal falls below
+            threshold, the event ends.
+    :param merge_thresh: Events that are separated by less than minimum_len get merged together. minimum_len
+            must be specified in number of time points, not actual time.
     :return: A list of event start and end times, and the maximum amplitude encountered in that event.
     """
 
     assert np.sum(s < 0) == 0, "segment_envelope: Can't segment a signal that has negative values!"
-
-    #determine threshold as some percentile of the nonzero amplitude distribution
-    thresh = s.max()*threshold_fraction
-    print 'segment_envelope: thresh=%f' % thresh
 
     #array to keep track of start and end times of each event
     events = list()
@@ -532,21 +533,61 @@ def segment_envelope(s, threshold_fraction=0.10):
             if x > max_amp:
                 #we found a new peak
                 max_amp = x
-            if x <= thresh:
+            if x <= threshold:
                 #the event has ended
                 in_event = False
                 events.append( (start_index, t, max_amp))
                 #print 'Identified event (%d, %d, %0.6f)' % (start_index, t, max_amp)
         else:
-            if x > thresh:
+            if x > threshold:
                 in_event = True
                 start_index = t
-                max_amp = thresh
+                max_amp = threshold
 
-    print '# of events: %d' % len(events)
-    #TODO: merge small adjacent events, break down long events
+    print '# of events (pre-merge): %d' % len(events)
+    events = np.array(events)
 
-    return np.array(events)
+    if merge_thresh is None:
+        return events
+
+    #compute the inter-event interval, used for merging smaller events into larger ones
+    iei = events[1:, 0] - events[:-1, 1]
+
+    #create an empty list for merged events
+    merged_events = list()
+
+    #set the "current event" to be the first event
+    estart, eend, eamp = events[0, :]
+
+    for k in range(len(events)-1):
+
+        #get the event at time k+1
+        stime,etime,amp = events[k+1, :]
+
+        #get the inter-event-interval between the event at time k+1 and k
+        the_iei = iei[k]
+        #print 'k=%d, the_iei=%d, merge_thresh=%d' % (k, the_iei, merge_thresh)
+
+        if the_iei < merge_thresh:
+            #extend the end time of the current event
+            eend = etime
+            #change the maximum peak of the current event
+            eamp = max(eamp, amp)
+        else:
+            #don't merge, pop the previous event
+            merged_events.append( (estart, eend, eamp))
+
+            #set the currente event to be the event at k+1
+            estart = stime
+            eend = etime
+            eamp = amp
+
+    #pop the last event
+    merged_events.append( (estart, eend, eamp))
+
+    print '# of merged events: %d' % len(merged_events)
+
+    return np.array(merged_events)
 
 
 def power_amplifier(s, thresh, pwr=2):
