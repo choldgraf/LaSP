@@ -367,5 +367,6 @@ def spike_trains_to_matrix(spike_trains, bin_size, start_time, duration):
         spikes_index = ((spikes[vi] - start_time) / bin_size).astype('int')
         #increment each bin by the number of spikes that lie in it
         for si in spikes_index:
-            spike_count[k, si] += 1.0
+            assert si <= spike_count.shape[1], "IndexError: nt=%d, si=%d, k=%d" % (nt, si, k)
+            spike_count[k, min(si, spike_count.shape[1]-1)] += 1.0
     return spike_count
