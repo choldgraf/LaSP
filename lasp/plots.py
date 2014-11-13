@@ -198,7 +198,7 @@ def make_phase_image(amp, phase, normalize=True, saturate=True, threshold=True):
     """
 
     nelectrodes,d = amp.shape
-    alpha = amp
+    alpha = copy.deepcopy(amp)
     if normalize:
         max_amp = np.percentile(amp, 98)
         alpha = alpha / max_amp
