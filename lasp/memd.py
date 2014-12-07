@@ -128,12 +128,12 @@ def compute_mean_envelope(s, nsamps=1000):
         #print '\t[%d] took %0.6f seconds' % (k, ietime)
 
     etime = time.time() - stime
-    print '%d samples took %0.6f seconds' % (nsamps, etime)
+    #print '%d samples took %0.6f seconds' % (nsamps, etime)
 
     return mean_env
 
 
-def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
+def sift(s, nsamps=100, resolution=50.0, max_iterations=30, verbose=False):
     """Do a single iteration of multi-variate empirical mode decomposition (MEMD) on the multi-dimensional signal s, obtaining a multi-variate IMF.
 
     Args:
@@ -187,8 +187,9 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
         #"resolution", the lower the average envelope energy, meaning that the IMF is converging.
         resolution_factor = np.log10(initial_energy / avg_envelope_energy)
 
-        print 'sift iter %d: initial_energy=%0.3f, env_energy=%0.3f, avg_envelope_energy=%0.3f, final_alpha=%0.2f, resolution_factor=%0.2f' % \
-              (iteration, initial_energy, env_energy, avg_envelope_energy, final_alpha, resolution_factor)
+        if verbose:
+            print 'sift iter %d: initial_energy=%0.3f, env_energy=%0.3f, avg_envelope_energy=%0.3f, final_alpha=%0.2f, resolution_factor=%0.2f' % \
+                  (iteration, initial_energy, env_energy, avg_envelope_energy, final_alpha, resolution_factor)
 
         if resolution_factor > resolution:
             converged = True
@@ -203,12 +204,13 @@ def sift(s, nsamps=100, resolution=50.0, max_iterations=30):
     return r
 
 
-def memd(s, nimfs, nsamps=100, resolution=1.0, max_iterations=30, num_noise_channels=0):
+def memd(s, nimfs, nsamps=100, resolution=1.0, max_iterations=30, num_noise_channels=0, verbose=False):
 
     imfs = list()
     N,T = s.shape
-    print 'Starting MEMD: N=%d, T=%d, nimfs=%d, nsamps=%d, resolution=%0.2f, max_iterations=%d, num_noise_channels=%d' % \
-                    (N, T, nimfs, nsamps, resolution, max_iterations, num_noise_channels)
+    if verbose:
+        print 'Starting MEMD: N=%d, T=%d, nimfs=%d, nsamps=%d, resolution=%0.2f, max_iterations=%d, num_noise_channels=%d' % \
+                        (N, T, nimfs, nsamps, resolution, max_iterations, num_noise_channels)
     r = copy.copy(s)
 
     if num_noise_channels > 0:
@@ -217,7 +219,7 @@ def memd(s, nimfs, nsamps=100, resolution=1.0, max_iterations=30, num_noise_chan
         r = np.vstack([r, noise])
 
     for n in range(nimfs):
-        imf = sift(r, nsamps=nsamps, resolution=resolution, max_iterations=max_iterations)
+        imf = sift(r, nsamps=nsamps, resolution=resolution, max_iterations=max_iterations, verbose=verbose)
         imfs.append(imf)
         r -= imf
     imfs = np.array(imfs)
