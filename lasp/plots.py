@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from stats import compute_R2
 
 
-def multi_plot(the_data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None, output_pattern=None, transpose=False):
+def multi_plot(the_data_list, plot_func, title=None, nrows=4, ncols=5, figsize=None, output_pattern=None, transpose=False, facecolor='gray'):
 
     nsp = 0
     fig = None
@@ -39,9 +39,9 @@ def multi_plot(the_data_list, plot_func, title=None, nrows=4, ncols=5, figsize=N
             if output_pattern is not None and fig is not None:
                 #save the current figure
                 ofile = output_pattern % fig_num
-                plt.savefig(ofile)
+                plt.savefig(ofile, facecolor=fig.get_facecolor(), edgecolor='none')
                 plt.close('all')
-            fig = plt.figure(figsize=figsize)
+            fig = plt.figure(figsize=figsize, facecolor=facecolor)
             fig_num += 1
             fig.subplots_adjust(top=0.95, bottom=0.02, right=0.97, left=0.03, hspace=0.20)
             if title is not None:
@@ -55,7 +55,7 @@ def multi_plot(the_data_list, plot_func, title=None, nrows=4, ncols=5, figsize=N
     #save last figure
     if fig is not None and output_pattern is not None:
         ofile = output_pattern % fig_num
-        plt.savefig(ofile)
+        plt.savefig(ofile, facecolor=fig.get_facecolor(), edgecolor='none')
         plt.close('all')
 
 
@@ -214,7 +214,8 @@ def make_phase_image(amp, phase, normalize=True, saturate=True, threshold=True):
     cnorm = ((180.0 / np.pi) * phase).astype('int')
     for j in range(nelectrodes):
         for ti in range(d):
-            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 99.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
+            #img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 99.0, 50.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
+            img[j, ti, :3] = husl.husl_to_rgb(cnorm[j, ti], 99.0, 61.0) #use HUSL color space: https://github.com/boronine/pyhusl/tree/v2.1.0
 
     img[:, :, 3] = alpha
 
