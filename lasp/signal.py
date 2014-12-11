@@ -259,7 +259,7 @@ def power_spectrum(s, sr, log=False, max_val=None):
     f = fft(s)
     freq = fftfreq(len(s), d=1.0/sr)
     findex = freq >= 0.0
-    ps = np.abs(f)
+    ps = np.abs(f)**2
     if log:
         if max_val is None:
             max_val = ps.max()
@@ -357,9 +357,9 @@ def find_extrema(s):
     return mini,maxi
 
 
-def another_hilbert(s):
+def analytic_signal(s):
     """
-        An implementation of the hilbert transform for computing the analytic signal.
+        An implementation of computing the analytic signal.
     """
 
     #take FFT
@@ -368,7 +368,7 @@ def another_hilbert(s):
 
     #zero out coefficients at negative frequencies
     sfft[freq < 0.0] = np.zeros(np.sum(freq < 0.0), dtype='complex')
-    sfft[freq > 0.0] *= 2.0
+    sfft[freq >= 0.0] *= 2.0
 
     #take the IFFT
     z = ifft(sfft)
