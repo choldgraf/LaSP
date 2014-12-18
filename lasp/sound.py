@@ -228,9 +228,8 @@ def spectral_envelope(s, sample_rate, cutoff_freq=200.0):
         Returns the spectral envelope of the signal, with same sample rate.
     """
 
-    srect = copy.copy(s)
     #rectify
-    srect = np.abs(srect)
+    srect = np.abs(s)
     #low pass filter
     if cutoff_freq is not None:
         srect = lowpass_filter(srect, sample_rate, cutoff_freq, filter_order=4)

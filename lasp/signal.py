@@ -255,9 +255,14 @@ def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwid
         return t,freq,timefreq
 
 
-def power_spectrum(s, sr, log=False, max_val=None):
-    f = fft(s)
-    freq = fftfreq(len(s), d=1.0/sr)
+def power_spectrum(s, sr, log=False, max_val=None, hanning=False):
+
+    sw = s
+    if hanning:
+        sw = s*np.hanning(len(s))
+
+    f = fft(sw)
+    freq = fftfreq(len(sw), d=1.0/sr)
     findex = freq >= 0.0
     ps = np.abs(f)**2
     if log:
