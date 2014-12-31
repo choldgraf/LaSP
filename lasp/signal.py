@@ -274,7 +274,7 @@ def power_spectrum(s, sr, log=False, max_val=None, hanning=False):
     return freq[findex], ps[findex]
 
 
-def mt_power_spectrum(s, sample_rate, window_size, low_bias=False):
+def mt_power_spectrum(s, sample_rate, window_size, low_bias=False, bandwidth=5.0):
     """
         Computes a jackknifed multi-taper power spectrum of a given signal. The jackknife is over
         windowed segments of the signal, specified by window_size.
@@ -296,7 +296,7 @@ def mt_power_spectrum(s, sample_rate, window_size, low_bias=False):
         ei = min(len(s), si + sample_length_bins)
         print 'si=%d, ei=%d, len(s)=%d' % (si, ei, len(s))
 
-        ps_freq,mt_ps,var = ntalg.multi_taper_psd(s[si:ei], Fs=sample_rate, adaptive=True, jackknife=False,
+        ps_freq,mt_ps,var = ntalg.multi_taper_psd(s[si:ei], Fs=sample_rate, adaptive=True, BW=bandwidth, jackknife=False,
                                                   low_bias=low_bias, sides='onesided')
         ps_ests.append(mt_ps)
 
