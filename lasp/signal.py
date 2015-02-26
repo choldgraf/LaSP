@@ -617,3 +617,15 @@ def power_amplifier(s, thresh, pwr=2):
     s /= s.max()
 
     return s
+
+def phase_locking_value(z1, z2):
+    """ Compute the phase-locking-value (PLV) between two complex signals. """
+
+    assert len(z1) == len(z2), "Signals must be same length! len(z1)=%d, len(z2)=%d" % (len(z1), len(z2))
+    N = len(z1)
+    theta = np.angle(z2) - np.angle(z1)
+
+    p = np.exp(complex(0, 1)*theta)
+    plv = np.abs(p.sum()) / N
+
+    return plv
