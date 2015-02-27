@@ -629,3 +629,29 @@ def phase_locking_value(z1, z2):
     plv = np.abs(p.sum()) / N
 
     return plv
+
+def correlation_function(s1, s2, lags):
+    
+    assert len(s1) == len(s2), "Signals must be same length! len(s1)=%d, len(s2)=%d" % (len(s1), len(s2))
+
+    s1_mean = s1.mean()
+    s2_mean = s2.mean()
+    s1_std = s1.std(ddof=1)
+    s2_std = s2.std(ddof=1)
+    s1_centered = s1 - s1_mean
+    s2_centered = s2 - s2_mean
+    N = len(s1)
+    
+    cf = np.zeros([len(lags)])
+    for k,lag in enumerate(lags):
+
+        if lag == 0:
+            cf[k] = np.dot(s1_centered, s2_centered) / (N-lag)
+        elif lag > 0:
+            cf[k] = np.dot(s1_centered[:-lag], s2_centered[lag:]) / (N-lag)
+        elif lag < 0:
+            cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N-lag)
+
+    cf /= s1_std * s2_std
+
+    return cf
