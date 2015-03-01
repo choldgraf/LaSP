@@ -355,17 +355,17 @@ class PhaseReassignment(object):
         return ps_r
 
 
-def postprocess_spectrogram(spec, thresh_percentile=10.0):
+def log_spectrogram(spec):
     """
-        Compute the log spectrogram and threshold any pixels that are below the percentile given by thresh_percentile.
+        Compute the log spectrogram.
     """
     lspec = np.zeros_like(spec)
+
     nz = spec > 0.0
-    lspec[nz] = 20*np.log10(spec[nz])
-    thresh = np.percentile(lspec.ravel(), thresh_percentile)
-    #print 'thresh=%0.6f, min=%0.6f, max=%0.6f' % (thresh, lspec[nz].min(), lspec[nz].max())
-    lspec[nz] -= thresh
-    lspec[lspec < 0.0] = 0.0
+    lspec[nz] = np.log10(spec[nz])
+    lspec *= 10
+    lspec += 100
+
     return lspec
 
 
@@ -430,7 +430,7 @@ def compute_mean_spectrogram(s, sample_rate, win_sizes, increment=None, num_freq
             inc = increment
         t,freq,tf = timefreq(s, sample_rate, win_size, inc, spec_estimator)
         ps = np.abs(tf)
-        ps_log = postprocess_spectrogram(ps)
+        ps_log = log_spectrogram(ps)
         timefreqs.append( (t, freq, ps_log) )
     etime = time.time() - stime
     #print 'time to compute %d spectrograms: %0.6fs' % (len(win_sizes), etime)
