@@ -618,6 +618,7 @@ def power_amplifier(s, thresh, pwr=2):
 
     return s
 
+
 def phase_locking_value(z1, z2):
     """ Compute the phase-locking-value (PLV) between two complex signals. """
 
@@ -629,6 +630,7 @@ def phase_locking_value(z1, z2):
     plv = np.abs(p.sum()) / N
 
     return plv
+
 
 def correlation_function(s1, s2, lags):
     
@@ -655,3 +657,13 @@ def correlation_function(s1, s2, lags):
     cf /= s1_std * s2_std
 
     return cf
+
+
+def get_envelope_end(env):
+    """ Given an amplitude envelope, get the index that indicates the derivative of the envelope
+        has converged to zero, indicating an end point.
+    """
+    denv = np.diff(env)
+    i = np.where(np.abs(denv) > 0)[0]
+    true_stop_index = np.max(i)+1
+    return true_stop_index
