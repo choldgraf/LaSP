@@ -125,7 +125,7 @@ def simulate_gamma(psth, trials, duration, num_trials=20):
     return new_trials
 
 
-def compute_psth(trials, duration, bin_size=0.001):
+def compute_psth(trials, duration, bin_size=0.001, time_offset=0.0):
     """
         Compute a peri-stimulus time histogram (PSTH), conditioned on an event such as stimulus.
 
@@ -138,31 +138,31 @@ def compute_psth(trials, duration, bin_size=0.001):
         Returns the average spike rate in KHz across trials in each time bin.
     """
 
-    nbins = int(np.ceil(duration / bin_size))
+    nbins = int(np.ceil((duration) / bin_size))
     spike_counts = np.zeros(nbins)
     for stimes in trials:
         if len(stimes) == 0:
             continue
         stimes = np.array(stimes)
         if len(stimes.shape) > 0:
-            #get index of spike times valid for the conditioned event
-            vi = (stimes >= 0.0) & (stimes <= duration)
+            # get index of spike times valid for the conditioned event
+            vi = (stimes >= time_offset) & (stimes <= duration)
 
-            #convert spike times to indices in PSTH
-            sbins = np.floor(stimes[vi] / bin_size).astype('int')
+            # convert spike times to indices in PSTH
+            sbins = np.floor((stimes[vi]-time_offset) / bin_size).astype('int')
 
-            #add spike to each bin
+            # add spike to each bin
             for k in sbins:
                 spike_counts[k] += 1
 
-    #compute rate in KHz by dividing by bin size
+    # compute rate in KHz by dividing by bin size
     spike_counts /= bin_size*1000.0
 
-    #take mean across trials (spikes were already summed across trials)
+    # take mean across trials (spikes were already summed across trials)
     spike_counts /= len(trials)
 
-    #construct time axis, represents time point at left hand of bin
-    t = np.arange(nbins).astype('float') * bin_size
+    # construct time axis, represents time point at left hand of bin
+    t = (np.arange(nbins).astype('float') * bin_size) + time_offset
 
     return t,spike_counts
 

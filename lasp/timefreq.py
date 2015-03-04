@@ -363,8 +363,9 @@ def log_spectrogram(spec):
 
     nz = spec > 0.0
     lspec[nz] = np.log10(spec[nz])
-    lspec *= 10
-    lspec += 100
+    lspec[nz] *= 10
+    lspec[nz] += 100
+    lspec[lspec < 0] = 0
 
     return lspec
 
