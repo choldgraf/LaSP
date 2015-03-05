@@ -549,7 +549,7 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
                 start_index = t
                 max_amp = threshold
 
-    print '# of events (pre-merge): %d' % len(events)
+    # print '# of events (pre-merge): %d' % len(events)
     events = np.array(events)
 
     if merge_thresh is None:
@@ -590,7 +590,7 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
     #pop the last event
     merged_events.append( (estart, eend, eamp))
 
-    print '# of merged events: %d' % len(merged_events)
+    # print '# of merged events: %d' % len(merged_events)
 
     return np.array(merged_events)
 
