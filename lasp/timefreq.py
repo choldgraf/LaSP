@@ -139,6 +139,59 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         return cspec_freq,cspec_mean.squeeze()
 
 
+class WaveletSpectrumEstimator(PowerSpectrumEstimator):
+
+    def __init__(self, frequencies=None, num_cycles_per_window=10, min_freq=1, max_freq=512, num_freqs=20, nstd=6):
+        PowerSpectrumEstimator.__init__(self)
+
+        self.num_cycles_per_window = num_cycles_per_window
+
+        if frequencies is None:
+            self.frequencies = np.logspace(np.log2(min_freq), np.log2(max_freq), num_freqs, base=2)
+            self.frequencies = self.frequencies[::-1]
+
+        # determine window size for each center frequency
+        self.window_lengths = np.zeros([len(self.frequencies)])
+        self.standard_deviations = np.zeros([len(self.frequencies)])
+        for k,f in enumerate(self.frequencies):
+            # compute the standard deviation of a Gaussian that captures the right number of cycles for the frequency
+            self.standard_deviations[k] = num_cycles_per_window / (nstd*f)
+            self.window_lengths[k] = nstd*self.standard_deviations[k]
+
+    def get_window_length(self):
+        # return the largest window length for the timefreq function to use
+        return self.window_lengths.max()
+
+    def get_frequencies(self, signal_length, sample_rate):
+        return self.frequencies
+
+    def estimate(self, signal, sample_rate):
+
+        # the maximum window length is used for each frequency, but the std of the gaussian changes
+        nwinlen = len(signal)
+        if nwinlen % 2 == 0:
+            nwinlen += 1
+        hnwinlen = nwinlen / 2
+
+        # go through each frequency, window with a Gaussian and then multiply by complex exponential
+        z = np.zeros([len(self.frequencies)], dtype='complex')
+        for k,f in enumerate(self.frequencies):
+
+            # construct the window
+            t = np.arange(-hnwinlen, hnwinlen+1, 1.0) / sample_rate
+            gauss_window = np.exp(-t**2 / (2.0*self.standard_deviations[k]**2))
+
+            # construct a complex exponential
+            theta = 2*np.pi*t*f
+            cexp = np.cos(theta) + complex(0, 1)*np.sin(theta)
+
+            # multiply the window, the complex exponential, and the signal, then sum them
+            n = min(len(gauss_window), len(signal))
+            z[k] = np.sum(gauss_window[:n]*signal[:n]*cexp[:n])*np.sqrt(f)
+
+        return self.frequencies,z
+
+
 def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_freq=0, max_freq=None):
     """
         Compute a time-frequency representation of the signal s.
@@ -149,6 +202,8 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
         spectrum_estimator: an instance of PowerSpectrumEstimator
         min_freq: the minimum frequency to analyze (Hz)
         max_freq: the maximum frequency to analyze (Hz)
+        window_length: The length in seconds of the window to use for each segment. If None, then the spectrum_estimator
+            object is queried.
 
         Returns t,freq,spec,rms:
 
@@ -159,6 +214,9 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
 
     if max_freq is None:
         max_freq = sample_rate / 2.0
+
+    if window_length is None:
+        window_length = spectrum_estimator.get_window_length()
 
     #compute lengths in # of samples
     nwinlen = int(sample_rate*window_length)
@@ -243,6 +301,13 @@ def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0,
 def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0, max_freq=None, adaptive=True, jackknife=False):
     spectrum_estimator = MultiTaperSpectrumEstimator(bandwidth=bandwidth, adaptive=adaptive, jackknife=jackknife)
     return timefreq(s, sample_rate, window_length, increment, spectrum_estimator=spectrum_estimator, min_freq=min_freq, max_freq=max_freq)
+
+
+def wavelet_scalogram(s, sample_rate, increment, frequencies=None, min_freq=1, max_freq=512, num_cycles_per_window=10,
+                      num_freqs=20, nstd=6):
+    est = WaveletSpectrumEstimator(frequencies=frequencies, num_cycles_per_window=num_cycles_per_window,
+                                   min_freq=min_freq, max_freq=max_freq, num_freqs=num_freqs, nstd=nstd)
+    return timefreq(s, sample_rate, None, increment, spectrum_estimator=est, min_freq=min_freq, max_freq=max_freq)
 
 
 class TimeFrequencyReassignment(object):
@@ -568,3 +633,5 @@ def roll_and_subtract(sig, amt=1, axis=1, hwr=False):
     if hwr is True:
         diff = np.clip(diff, 0, np.inf)
     return diff
+
+

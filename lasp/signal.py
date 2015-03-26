@@ -2,6 +2,7 @@ import numpy as np
 import mne
 import pandas as pd
 from scipy.fftpack import fft,fftfreq,ifft
+from scipy.ndimage import convolve1d
 from scipy.signal import filter_design, resample,filtfilt
 
 import matplotlib.pyplot as plt
@@ -667,3 +668,11 @@ def get_envelope_end(env):
     i = np.where(np.abs(denv) > 0)[0]
     true_stop_index = np.max(i)+1
     return true_stop_index
+
+
+def simple_smooth(s, window_len):
+
+    w = np.hanning(window_len)
+    w /= w.sum()
+    return convolve1d(s, w)
+

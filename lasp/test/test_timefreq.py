@@ -8,7 +8,8 @@ import nitime.algorithms as ntalg
 
 from lasp.sound import plot_spectrogram
 
-from lasp.timefreq import GaussianSpectrumEstimator,MultiTaperSpectrumEstimator,timefreq,AmplitudeReassignment,PhaseReassignment
+from lasp.timefreq import GaussianSpectrumEstimator,MultiTaperSpectrumEstimator,timefreq,AmplitudeReassignment,PhaseReassignment, \
+    WaveletSpectrumEstimator
 
 
 class TestTimeFreq(unittest.TestCase):
@@ -19,6 +20,7 @@ class TestTimeFreq(unittest.TestCase):
     def tearDown(self):
         pass
 
+    """
     def test_mt(self):
 
         #create a monocomponent signal
@@ -65,10 +67,10 @@ class TestTimeFreq(unittest.TestCase):
                 nsp += 1
 
         plt.show()
+    """
 
     def test_timefreq(self):
 
-        #create a monocomponent signal
         np.random.seed(12345)
         sr = 381.4697
         dt = 1.0 / sr
@@ -77,12 +79,12 @@ class TestTimeFreq(unittest.TestCase):
 
         t = np.arange(0, int(duration*sr))*dt
 
-        #create a monocomponent signal
+        #create a multicomponent signal
         f1 = 30.0
         f2 = 60.0
         s = np.sin(2*np.pi*t*f1) + np.sin(2*np.pi*t*f2)
 
-        compare_timefreqs(s, sr)
+        compare_timefreqs(s, sr, win_sizes=[None])
         plt.show()
 
     """
@@ -138,23 +140,24 @@ def compare_timefreqs(s, sample_rate, win_sizes=[0.050, 0.100, 0.250, 0.500, 1.2
     mt_est_highbw = MultiTaperSpectrumEstimator(bandwidth=30.0, adaptive=False)
     mt_est_highbw_adapt = MultiTaperSpectrumEstimator(bandwidth=30.0, adaptive=True, max_adaptive_iter=150)
     mt_est_highbw_jn = MultiTaperSpectrumEstimator(bandwidth=30.0, adaptive=False, jackknife=True)
+    wavelet = WaveletSpectrumEstimator(num_cycles_per_window=10, min_freq=1, max_freq=sample_rate/2, num_freqs=50, nstd=6)
     #estimators = [gaussian_est, mt_est_lowbw, mt_est_lowbw_adapt, mt_est_highbw, mt_est_highbw_adapt]
-    estimators = [mt_est_lowbw_adapt]
+    estimators = [wavelet]
     #enames = ['gauss', 'lowbw', 'lowbw_a', 'highbw', 'highbw_a']
-    enames = ['lowbw_a']
+    enames = ['wavelet']
 
     #run each estimator for each window size and plot the amplitude of the time frequency representation
     plt.figure()
     spnum = 1
     for k,win_size in enumerate(win_sizes):
-        increment = win_size / 2.0
+        increment = 1.0 / sample_rate
         for j,est in enumerate(estimators):
-            print 'window_size=%dms, estimator=%s' % (win_size*1000, enames[j])
             t,freq,tf = timefreq(s, sample_rate, win_size, increment, est)
+            print 'freq=',freq
             ax = plt.subplot(len(win_sizes), len(estimators), spnum)
-            plot_spectrogram(t, freq, np.abs(tf), ax=ax, colorbar=False, ticks=False)
+            plot_spectrogram(t, freq, np.abs(tf), ax=ax, colorbar=True, ticks=True)
             if k == 0:
                 plt.title(enames[j])
-            if j == 0:
-                plt.ylabel('%d ms' % (win_size*1000))
+            #if j == 0:
+                #plt.ylabel('%d ms' % (win_size*1000))
             spnum += 1
