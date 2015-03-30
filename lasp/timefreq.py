@@ -149,6 +149,8 @@ class WaveletSpectrumEstimator(PowerSpectrumEstimator):
         if frequencies is None:
             self.frequencies = np.logspace(np.log2(min_freq), np.log2(max_freq), num_freqs, base=2)
             self.frequencies = self.frequencies[::-1]
+        else:
+            self.frequencies = frequencies
 
         # determine window size for each center frequency
         self.window_lengths = np.zeros([len(self.frequencies)])
