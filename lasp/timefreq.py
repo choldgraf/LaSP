@@ -19,14 +19,14 @@ from lasp.signal import lowpass_filter, bandpass_filter
 from brian import hears, Hz
 
 
-class PowerSpectrumEstimator(object):
+class ComplexSpectrumEstimator(object):
     __metaclass__ = ABCMeta
 
     def __init__(self):
         pass
 
     @abstractmethod
-    def estimate(self, signal, sample_rate):
+    def estimate(self, signal, sample_rate, start_time, end_time):
         return NotImplementedError('Use a subclass of PowerSpectrumEstimator!')
 
     @abstractmethod
@@ -34,10 +34,10 @@ class PowerSpectrumEstimator(object):
         return NotImplementedError('Use a subclass of PowerSpectrumEstimator!')
 
 
-class GaussianSpectrumEstimator(PowerSpectrumEstimator):
+class GaussianSpectrumEstimator(ComplexSpectrumEstimator):
 
     def __init__(self, nstd=6):
-        PowerSpectrumEstimator.__init__(self)
+        ComplexSpectrumEstimator.__init__(self)
         self.nstd = nstd
 
     def get_frequencies(self, signal_length, sample_rate):
@@ -45,7 +45,7 @@ class GaussianSpectrumEstimator(PowerSpectrumEstimator):
         nz = freq >= 0.0
         return freq[nz]
 
-    def estimate(self, signal, sample_rate):
+    def estimate(self, signal, sample_rate, start_time, end_time):
         nwinlen = len(signal)
         if nwinlen % 2 == 0:
             nwinlen += 1
@@ -66,10 +66,10 @@ class GaussianSpectrumEstimator(PowerSpectrumEstimator):
         return freq[nz],s_fft[nz]
 
 
-class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
+class MultiTaperSpectrumEstimator(ComplexSpectrumEstimator):
 
     def __init__(self, bandwidth, adaptive=False, jackknife=False, max_adaptive_iter=150):
-        PowerSpectrumEstimator.__init__(self)
+        ComplexSpectrumEstimator.__init__(self)
         self.bandwidth = bandwidth
         self.jackknife = jackknife
         self.adaptive = adaptive
@@ -80,7 +80,7 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         nz = cspec_freq >= 0.0
         return cspec_freq[nz]
 
-    def estimate(self, signal, sample_rate, debug=False):
+    def estimate(self, signal, sample_rate, start_time, end_time, debug=False):
 
         slen = len(signal)
 
@@ -139,10 +139,10 @@ class MultiTaperSpectrumEstimator(PowerSpectrumEstimator):
         return cspec_freq,cspec_mean.squeeze()
 
 
-class WaveletSpectrumEstimator(PowerSpectrumEstimator):
+class WaveletSpectrumEstimator(ComplexSpectrumEstimator):
 
     def __init__(self, frequencies=None, num_cycles_per_window=10, min_freq=1, max_freq=512, num_freqs=20, nstd=6):
-        PowerSpectrumEstimator.__init__(self)
+        ComplexSpectrumEstimator.__init__(self)
 
         self.num_cycles_per_window = num_cycles_per_window
 
@@ -167,29 +167,26 @@ class WaveletSpectrumEstimator(PowerSpectrumEstimator):
     def get_frequencies(self, signal_length, sample_rate):
         return self.frequencies
 
-    def estimate(self, signal, sample_rate):
+    def estimate(self, signal, sample_rate, start_time, end_time):
 
         # the maximum window length is used for each frequency, but the std of the gaussian changes
-        nwinlen = len(signal)
-        if nwinlen % 2 == 0:
-            nwinlen += 1
-        hnwinlen = nwinlen / 2
+        slen = len(signal)
 
         # go through each frequency, window with a Gaussian and then multiply by complex exponential
         z = np.zeros([len(self.frequencies)], dtype='complex')
         for k,f in enumerate(self.frequencies):
 
             # construct the window
-            t = np.arange(-hnwinlen, hnwinlen+1, 1.0) / sample_rate
-            gauss_window = np.exp(-t**2 / (2.0*self.standard_deviations[k]**2))
+            t = np.linspace(start_time, end_time, slen)
+            ct = ((end_time - start_time) / 2.0) + start_time
+            gauss_window = np.exp(-(t - ct)**2 / self.standard_deviations[k]**2)
 
             # construct a complex exponential
-            theta = 2*np.pi*t*f
+            theta = 2*np.pi*f*(t - ct)
             cexp = np.cos(theta) + complex(0, 1)*np.sin(theta)
 
             # multiply the window, the complex exponential, and the signal, then sum them
-            n = min(len(gauss_window), len(signal))
-            z[k] = np.sum(gauss_window[:n]*signal[:n]*cexp[:n])*np.sqrt(f)
+            z[k] = np.sum(gauss_window*signal*cexp)*np.sqrt(f)
 
         return self.frequencies,z
 
@@ -248,7 +245,7 @@ def timefreq(s, sample_rate, window_length, increment, spectrum_estimator, min_f
         si = center - hnwinlen
         ei = center + hnwinlen + 1
 
-        spec_freq,est = spectrum_estimator.estimate(zs[si:ei], sample_rate)
+        spec_freq,est = spectrum_estimator.estimate(zs[si:ei], sample_rate, si/sample_rate, ei/sample_rate)
         findex = (spec_freq <= max_freq) & (spec_freq >= min_freq)
         #print 'k=%d' % k
         #print 'si=%d, ei=%d' % (si, ei)
