@@ -676,3 +676,47 @@ def simple_smooth(s, window_len):
     w /= w.sum()
     return convolve1d(s, w)
 
+
+def quantify_cf(lags, cf, plot=False):
+    """ Quantify properties of an auto or cross correlation function. """
+
+    # identify the peak magnitude
+    abs_cf = np.abs(cf)
+    peak_magnitude = abs_cf.max()
+
+    # identify the peak delay
+    imax = abs_cf.argmax()
+    peak_delay = lags[imax]
+
+    # compute the area under the curve
+    dt = np.diff(lags).max()
+    cf_width = abs_cf.sum()*dt
+
+    # compute the skewdness
+    p = abs_cf / abs_cf.sum()
+    mean = np.sum(lags*p)
+    std = np.sqrt(np.sum(p*(abs_cf - mean)**2))
+    skew = np.sum(p*(abs_cf - mean)**3) / std**3
+
+    # compute the left and right areas under the curve
+    max_width = abs_cf[lags != 0].sum()*dt
+    right_width = abs_cf[lags > 0].sum()*dt
+    left_width = abs_cf[lags < 0].sum()*dt
+
+    # create a measure of anisotropy from the AUCs
+    anisotropy = (right_width - left_width) / max_width
+
+    if plot:
+        plt.figure()
+        plt.axhline(0, c='k')
+        plt.plot(lags, cf, 'r-', linewidth=3)
+        plt.axvline(peak_delay, c='g', alpha=0.75)
+        plt.ylim(-1, 1)
+        plt.axis('tight')
+        t = 'width=%0.1f, mean=%0.1f, std=%0.1f, skew=%0.1f, anisotropy=%0.2f' % (cf_width, mean, std, skew, anisotropy)
+        plt.title(t)
+        plt.show()
+
+    return {'magnitude':peak_magnitude, 'delay':peak_delay, 'width':cf_width,
+            'mean':mean, 'std':std, 'skew':skew, 'anisotropy':anisotropy}
+
