@@ -150,7 +150,7 @@ class WaveletSpectrumEstimator(ComplexSpectrumEstimator):
             self.frequencies = np.logspace(np.log2(min_freq), np.log2(max_freq), num_freqs, base=2)
             self.frequencies = self.frequencies[::-1]
         else:
-            self.frequencies = frequencies
+            self.frequencies = np.array(frequencies).astype('float')
 
         # determine window size for each center frequency
         self.window_lengths = np.zeros([len(self.frequencies)])
