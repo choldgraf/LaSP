@@ -660,6 +660,26 @@ def correlation_function(s1, s2, lags):
     return cf
 
 
+def coherency(s1, s2, lags):
+
+    cf = correlation_function(s1, s2, lags)
+
+    acf1 = correlation_function(s1, s1, lags)
+    acf2 = correlation_function(s2, s2, lags)
+
+    cf_fft = fft(cf)
+    acf1_fft = fft(acf1)
+    acf2_fft = fft(acf2)
+
+    # assert np.abs(acf1_fft.imag).max() < 1e-12, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
+    # assert np.abs(acf2_fft.imag).max() < 1e-12, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
+
+    c = ifft(cf_fft / np.sqrt(np.abs(acf1_fft)*np.abs(acf2_fft)))
+    assert np.abs(c.imag).max() < 1e-12, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
+
+    return c.real
+
+
 def get_envelope_end(env):
     """ Given an amplitude envelope, get the index that indicates the derivative of the envelope
         has converged to zero, indicating an end point.
