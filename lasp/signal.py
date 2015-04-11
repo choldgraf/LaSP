@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import nitime.algorithms as ntalg
 import time
 from sklearn.decomposition import PCA,RandomizedPCA
+from sklearn.linear_model import Ridge
 from lasp.coherence import compute_mtcoherence
 
 
@@ -634,6 +635,15 @@ def phase_locking_value(z1, z2):
 
 
 def correlation_function(s1, s2, lags):
+    """ Computes the cross-correlation function between signals s1 and s2. The cross correlation function is defined as:
+
+            cf(k) = sum_over_t( (s1(t) - s1.mean()) * (s2(t+k) - s2.mean()) ) / s1.std()*s2.std()
+
+    :param s1: The first signal.
+    :param s2: The second signal.
+    :param lags: An array of integers indicating the lags. The lags are in units of sample period.
+    :return: cf The cross correlation function evaluated at the lags.
+    """
     
     assert len(s1) == len(s2), "Signals must be same length! len(s1)=%d, len(s2)=%d" % (len(s1), len(s2))
 
@@ -740,3 +750,26 @@ def quantify_cf(lags, cf, plot=False):
     return {'magnitude':peak_magnitude, 'delay':peak_delay, 'width':cf_width,
             'mean':mean, 'std':std, 'skew':skew, 'anisotropy':anisotropy}
 
+
+def whiten(s, order):
+    """ Whiten the signal s with an auto-regressive model of order specified by "order".
+
+        :returns sw,coef sw is the whitened signal (original signal minus prediction), coef is coefficients of AR model
+    """
+
+    # remove the mean of the signal
+    sm = s - s.mean()
+
+    # construct a feature matrix
+    X = np.zeros([len(s)-1, order])
+    for k in range(order):
+        X[k:, k] = sm[k:-1]
+
+    # do a regression
+    y = sm[1:]
+
+    reg = Ridge(alpha=0, fit_intercept=False)
+    reg.fit(X, y)
+    spred = reg.predict(X)
+
+    return sm - np.r_[0, spred], reg.coef_
