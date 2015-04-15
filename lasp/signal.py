@@ -670,7 +670,7 @@ def correlation_function(s1, s2, lags):
     return cf
 
 
-def coherency(s1, s2, lags, noise_floor_db=80.):
+def coherency(s1, s2, lags, noise_floor_db=40., plot=False):
     """ Compute the coherency between two signals s1 and s2.
 
     :param s1: The first signal.
@@ -712,25 +712,69 @@ def coherency(s1, s2, lags, noise_floor_db=80.):
     assert np.abs(acf1_fft.imag).max() < 1e-12, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
     assert np.abs(acf2_fft.imag).max() < 1e-12, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
 
-    c = ifft(cf_fft / np.sqrt(np.abs(acf1_fft)*np.abs(acf2_fft)))
+    cpre = cf_fft / np.sqrt(np.abs(acf1_fft)*np.abs(acf2_fft))
+    cpre[zeros] = 0
+    c = ifft(cpre)
     assert np.abs(c.imag).max() < 1e-12, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
-    c[zeros] = 0
 
     coh = fftshift(c.real)
 
-    """
-    plt.figure()
-    plt.subplot(2, 1, 1)
-    plt.plot(fftshift(acf1_ps) / acf1_ps.max(), 'r')
-    plt.plot(fftshift(acf2_ps) / acf2_ps.max(), 'b')
-    cf_ps =fftshift(np.abs(cf_fft))
-    plt.plot(cf_ps / cf_ps.max(), 'g--')
-    plt.plot(coh, 'k-')
-    plt.subplot(2, 1, 2)
-    plt.plot(fftshift(db1), 'r')
-    plt.plot(fftshift(db2), 'b')
-    plt.show()
-    """
+    freq = fftshift(fftfreq(len(lags)))
+    fi = freq >= 0
+
+    if plot:
+        plt.figure()
+        plt.subplot(2, 3, 1)
+        plt.plot(s1, 'r-')
+        plt.plot(s2, 'b-')
+        plt.legend(['s1', 's2'])
+        plt.xlabel('Time')
+        plt.axis('tight')
+        plt.title('Signals')
+
+        plt.subplot(2, 3, 2)
+        plt.axvline(0, c='k')
+        plt.axhline(0, c='k')
+        l1 = plt.plot(lags, fftshift(acf1), 'r-')
+        l2 = plt.plot(lags, fftshift(acf2), 'b-')
+        l3 = plt.plot(lags, fftshift(cf), 'g-')
+        plt.title('Correlation Functions')
+        plt.xlabel('Lags')
+        plt.legend(['', '', 'ACF1', 'ACF2', 'CF12'])
+
+        plt.subplot(2, 3, 3)
+        plt.axhline(0, c='k', alpha=0.75)
+        plt.axvline(0, c='k', alpha=0.75)
+        plt.plot(lags, coh, 'k-')
+        plt.ylabel('Coherency')
+        plt.xlabel('Lag')
+        plt.axis('tight')
+        plt.title('Coherency')
+
+        plt.subplot(2, 3, 4)
+        plt.plot(freq[fi], fftshift(acf1_ps)[fi], 'r')
+        plt.plot(freq[fi], fftshift(acf2_ps)[fi], 'b')
+        cf_ps = fftshift(np.abs(cf_fft))
+        cf_pre_ps = fftshift(np.abs(cpre))
+        plt.plot(freq[fi], cf_ps[fi], 'g--')
+        plt.plot(freq[fi], cf_pre_ps[fi], 'm-')
+        plt.legend(['ACF1', 'ACF2', 'CF12', 'CPRE'])
+        plt.ylabel('Power (raw)')
+        plt.xlabel('Frequency')
+        plt.axis('tight')
+        plt.title('Raw Power Spectra')
+
+        plt.subplot(2, 3, 5)
+        plt.axhline(0, c='k')
+        plt.plot(freq[fi], fftshift(db1)[fi], 'r')
+        plt.plot(freq[fi], fftshift(db2)[fi], 'b')
+        plt.legend(['ACF1', 'ACF2'])
+        plt.ylabel('Power (dB)')
+        plt.xlabel('Frequency')
+        plt.axis('tight')
+        plt.title('Log Power Spectra')
+
+        plt.show()
 
     return coh
 
