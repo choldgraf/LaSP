@@ -1,7 +1,7 @@
 import numpy as np
 import mne
 import pandas as pd
-from scipy.fftpack import fft,fftfreq,ifft
+from scipy.fftpack import fft,fftfreq,ifft,fftshift
 from scipy.ndimage import convolve1d
 from scipy.signal import filter_design, resample,filtfilt
 
@@ -659,35 +659,80 @@ def correlation_function(s1, s2, lags):
     for k,lag in enumerate(lags):
 
         if lag == 0:
-            cf[k] = np.dot(s1_centered, s2_centered) / (N-lag)
+            cf[k] = np.dot(s1_centered, s2_centered) / N
         elif lag > 0:
             cf[k] = np.dot(s1_centered[:-lag], s2_centered[lag:]) / (N-lag)
         elif lag < 0:
-            cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N-lag)
+            cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N+lag)
 
     cf /= s1_std * s2_std
 
     return cf
 
 
-def coherency(s1, s2, lags):
+def coherency(s1, s2, lags, noise_floor_db=80.):
+    """ Compute the coherency between two signals s1 and s2.
 
-    cf = correlation_function(s1, s2, lags)
+    :param s1: The first signal.
+    :param s2: The second signal.
+    :param lags: The lags to compute the coherency. They must be symmetric around zero, like lags=np.arange(-10, 11, 1).
 
-    acf1 = correlation_function(s1, s1, lags)
-    acf2 = correlation_function(s2, s2, lags)
+    :return: coh - The lags used to compute the coherency in units of time steps, and the coherency function.
+    """
+
+    # test for symmetry
+    i = len(lags) / 2
+    assert lags[i] == 0, "Midpoint of lags must be zero for coherency!"
+    assert np.sum(-lags[:i] != lags[-i:][::-1]) == 0, "lags must be symmetric for coherency!"
+
+    shift_lags = fftshift(lags)
+    if len(lags) % 2 == 1:
+        # shift zero from end of shift_lags to beginning
+        shift_lags = np.roll(shift_lags, 1)
+
+    cf = correlation_function(s1, s2, shift_lags)
+    acf1 = correlation_function(s1, s1, shift_lags)
+    acf2 = correlation_function(s2, s2, shift_lags)
 
     cf_fft = fft(cf)
     acf1_fft = fft(acf1)
     acf2_fft = fft(acf2)
 
-    # assert np.abs(acf1_fft.imag).max() < 1e-12, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
-    # assert np.abs(acf2_fft.imag).max() < 1e-12, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
+    # determine which points are noisy in acfs
+    acf1_ps = np.abs(acf1_fft)
+    db1 = 20*np.log10(acf1_ps / acf1_ps.max()) + noise_floor_db
+    z1 = db1 <= 0
+
+    acf2_ps = np.abs(acf2_fft)
+    db2 = 20*np.log10(acf2_ps / acf2_ps.max()) + noise_floor_db
+    z2 = db2 <= 0
+
+    zeros = z1 | z2
+
+    assert np.abs(acf1_fft.imag).max() < 1e-12, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
+    assert np.abs(acf2_fft.imag).max() < 1e-12, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
 
     c = ifft(cf_fft / np.sqrt(np.abs(acf1_fft)*np.abs(acf2_fft)))
     assert np.abs(c.imag).max() < 1e-12, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
+    c[zeros] = 0
 
-    return c.real
+    coh = fftshift(c.real)
+
+    """
+    plt.figure()
+    plt.subplot(2, 1, 1)
+    plt.plot(fftshift(acf1_ps) / acf1_ps.max(), 'r')
+    plt.plot(fftshift(acf2_ps) / acf2_ps.max(), 'b')
+    cf_ps =fftshift(np.abs(cf_fft))
+    plt.plot(cf_ps / cf_ps.max(), 'g--')
+    plt.plot(coh, 'k-')
+    plt.subplot(2, 1, 2)
+    plt.plot(fftshift(db1), 'r')
+    plt.plot(fftshift(db2), 'b')
+    plt.show()
+    """
+
+    return coh
 
 
 def get_envelope_end(env):
