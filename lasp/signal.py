@@ -646,6 +646,8 @@ def correlation_function(s1, s2, lags):
     """
     
     assert len(s1) == len(s2), "Signals must be same length! len(s1)=%d, len(s2)=%d" % (len(s1), len(s2))
+    assert np.sum(np.isnan(s1)) == 0, "There are NaNs in s1"
+    assert np.sum(np.isnan(s2)) == 0, "There are NaNs in s2"
 
     s1_mean = s1.mean()
     s2_mean = s2.mean()
@@ -654,7 +656,9 @@ def correlation_function(s1, s2, lags):
     s1_centered = s1 - s1_mean
     s2_centered = s2 - s2_mean
     N = len(s1)
-    
+
+    assert N > lags.max(), "Lags are too long, length of signal is %d, lags.max()=%d" % (N, lags.max())
+
     cf = np.zeros([len(lags)])
     for k,lag in enumerate(lags):
 
@@ -662,6 +666,19 @@ def correlation_function(s1, s2, lags):
             cf[k] = np.dot(s1_centered, s2_centered) / N
         elif lag > 0:
             cf[k] = np.dot(s1_centered[:-lag], s2_centered[lag:]) / (N-lag)
+            """
+            if np.isnan(cf[k]):
+                print 's1_centered=',s1_centered[:-lag]
+                print 's2_centered=',s2_centered[lag:]
+                plt.figure()
+                plt.plot(s1_centered[:-lag], 'r-')
+                plt.plot(s2_centered[lag:], 'b-')
+                plt.legend(['s1', 's2'])
+                plt.axis('tight')
+                print 'There is a nan, lag=%d, k=%d, N=%d, len(s1_centered)=%d, len(s2_centered)=%d...' % (lag, k, N, len(s1_centered), len(s2_centered))
+                plt.show()
+            """
+
         elif lag < 0:
             cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N+lag)
 
@@ -688,7 +705,7 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
     assert lags[i] == 0, "Midpoint of lags must be zero for coherency!"
     assert np.sum(-lags[:i] != lags[-i:][::-1]) == 0, "lags must be symmetric for coherency!"
 
-    window = np.ones([len(lags)])
+    window = np.ones([len(lags)], dtype='float')
     if window_fraction is not None:
         assert window_fraction > 0 and window_fraction <= 1, "window_fraction must be between 0 and 1"
         # create a gaussian windowing function for the CF and ACFs
@@ -707,6 +724,15 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
     acf1 = correlation_function(s1, s1, shift_lags)
     acf2 = correlation_function(s2, s2, shift_lags)
 
+    if np.sum(np.isnan(cf)) > 0:
+        # print 'len(lags)=%d, len(s1)=%d, len(s2)=%d' % (len(lags), len(s1), len(s2))
+        print 'signals=',zip(s1, s2)
+        print 'shift_lags,cf=',zip(shift_lags, cf)
+        raise Exception("Nans in cf")
+
+    assert np.sum(np.isnan(acf1)) == 0, "Nans in acf1"
+    assert np.sum(np.isnan(acf2)) == 0, "Nans in acf2"
+
     if window_fraction is not None:
         cf *= window
         acf1 *= window
@@ -719,12 +745,12 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
     acf1_ps = np.abs(acf1_fft)
     acf2_ps = np.abs(acf2_fft)
 
-    assert np.abs(acf1_fft.imag).max() < 1e-12, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
-    assert np.abs(acf2_fft.imag).max() < 1e-12, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
+    assert np.abs(acf1_fft.imag).max() < 1e-8, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
+    assert np.abs(acf2_fft.imag).max() < 1e-8, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
 
     cpre = cf_fft / np.sqrt(acf1_ps*acf2_ps)
     c = ifft(cpre)
-    assert np.abs(c.imag).max() < 1e-12, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
+    assert np.abs(c.imag).max() < 1e-8, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
 
     coh = fftshift(c.real)
     freq = fftshift(fftfreq(len(lags)))
