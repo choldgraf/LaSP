@@ -687,7 +687,7 @@ def correlation_function(s1, s2, lags):
     return cf
 
 
-def coherency(s1, s2, lags, plot=False, window_fraction=None):
+def coherency(s1, s2, lags, plot=False, window_fraction=None, noise_floor_db=None):
     """ Compute the coherency between two signals s1 and s2.
 
     :param s1: The first signal.
@@ -696,6 +696,9 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
     :param window_fraction: If not None, then each correlation function and auto-correlation-function is multiplied
             by a Gaussian window with standard deviation=window_fraction*lags.max(), prior to being turned into the
             coherency. This maybe suppresses high frequency noise in the coherency function.
+    :param noise_floor_db: The threshold in decibels to zero out power in the auto and cross correlation function
+            power spectrums, prior to taking the inverse FFT to produce the coherence. This is another way of
+            eliminating high frequency noise in the coherency.
 
     :return: coh - The lags used to compute the coherency in units of time steps, and the coherency function.
     """
@@ -745,12 +748,26 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
     acf1_ps = np.abs(acf1_fft)
     acf2_ps = np.abs(acf2_fft)
 
+    # determine which points are noise (with magnitudes too low to be useful) in the acfs
+    zeros = np.zeros([len(cf_fft)], dtype='bool')
+    if noise_floor_db is not None:
+        db1 = 20*np.log10(acf1_ps / acf1_ps.max()) + noise_floor_db
+        z1 = db1 <= 0
+
+        db2 = 20*np.log10(acf2_ps / acf2_ps.max()) + noise_floor_db
+        z2 = db2 <= 0
+        zeros = z1 | z2
+
     assert np.abs(acf1_fft.imag).max() < 1e-8, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
     assert np.abs(acf2_fft.imag).max() < 1e-8, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
 
     cpre = cf_fft / np.sqrt(acf1_ps*acf2_ps)
+    cpre[zeros] = 0
     c = ifft(cpre)
     assert np.abs(c.imag).max() < 1e-8, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
+
+    # if np.sum(np.abs(cpre) > 1) > 0:
+    #   plot = True
 
     coh = fftshift(c.real)
     freq = fftshift(fftfreq(len(lags)))
@@ -766,7 +783,7 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
         plt.axis('tight')
         plt.title('Signals')
 
-        plt.subplot(2, 2, 2)
+        plt.subplot(2, 3, 2)
         plt.axvline(0, c='k')
         plt.axhline(0, c='k')
         l1 = plt.plot(lags, fftshift(acf1), 'r-')
@@ -778,7 +795,16 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
         plt.axis('tight')
         plt.ylim(-0.5, 1.0)
 
-        plt.subplot(2, 2, 3)
+        plt.subplot(2, 3, 3)
+        plt.axhline(0, c='k', alpha=0.75)
+        plt.axvline(0, c='k', alpha=0.75)
+        plt.plot(lags, coh, 'm-')
+        plt.ylabel('Coherency')
+        plt.xlabel('Lag')
+        plt.axis('tight')
+        plt.title('Coherency')
+
+        plt.subplot(2, 3, 4)
         plt.plot(freq[fi], fftshift(acf1_ps)[fi], 'r')
         plt.plot(freq[fi], fftshift(acf2_ps)[fi], 'b')
         cf_ps = fftshift(np.abs(cf_fft))
@@ -791,14 +817,16 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None):
         plt.axis('tight')
         plt.title('Raw Power Spectra')
 
-        plt.subplot(2, 2, 4)
-        plt.axhline(0, c='k', alpha=0.75)
-        plt.axvline(0, c='k', alpha=0.75)
-        plt.plot(lags, coh, 'm-')
-        plt.ylabel('Coherency')
-        plt.xlabel('Lag')
-        plt.axis('tight')
-        plt.title('Coherency')
+        if noise_floor_db:
+            plt.subplot(2, 3, 5)
+            plt.axhline(0, c='k')
+            plt.plot(freq[fi], fftshift(db1)[fi], 'r')
+            plt.plot(freq[fi], fftshift(db2)[fi], 'b')
+            plt.legend(['ACF1', 'ACF2'])
+            plt.ylabel('Power (dB)')
+            plt.xlabel('Frequency')
+            plt.axis('tight')
+            plt.title('Log Power Spectra')
 
         plt.show()
 
