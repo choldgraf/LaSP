@@ -766,12 +766,12 @@ def coherency(s1, s2, lags, plot=False, window_fraction=None, noise_floor_db=Non
     c = ifft(cpre)
     assert np.abs(c.imag).max() < 1e-8, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
 
-    # if np.sum(np.abs(cpre) > 1) > 0:
-    #   plot = True
-
     coh = fftshift(c.real)
     freq = fftshift(fftfreq(len(lags)))
     fi = freq >= 0
+
+    if np.sum(np.abs(coh) > 1) > 0:
+        print 'Warning: coherency is > 1!'
 
     if plot:
         plt.figure()
