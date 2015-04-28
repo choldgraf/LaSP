@@ -871,13 +871,30 @@ def quantify_cf(lags, cf, plot=False):
     std = np.sqrt(np.sum(p*(abs_cf - mean)**2))
     skew = np.sum(p*(abs_cf - mean)**3) / std**3
 
-    # compute the left and right areas under the curve
+    # compute the left and right areas under the absolute curve
     max_width = abs_cf[lags != 0].sum()*dt
     right_width = abs_cf[lags > 0].sum()*dt
     left_width = abs_cf[lags < 0].sum()*dt
 
     # create a measure of anisotropy from the AUCs
     anisotropy = (right_width - left_width) / max_width
+    
+    li = lags < 0
+    ri = lags > 0
+
+    # determine the mean lag time, i.e. the lag "center of mass". do this for each half
+    cfl = np.abs(cf[li]) / np.abs(cf[li]).sum()
+    left_lag = np.sum(cfl*lags[li])
+    cfr = np.abs(cf[ri]) / np.abs(cf[ri]).sum()
+    right_lag = np.sum(cfr*lags[ri])
+
+    # integrate the right and left sides independently
+    dl = np.diff(lags).max()
+    left_sum = cf[li].sum()*dl
+    right_sum = cf[ri].sum()*dl
+
+    # take the correlation coefficient at zero lag
+    cc = cf[lags == 0][0]
 
     if plot:
         plt.figure()
@@ -891,7 +908,8 @@ def quantify_cf(lags, cf, plot=False):
         plt.show()
 
     return {'magnitude':peak_magnitude, 'delay':peak_delay, 'width':cf_width,
-            'mean':mean, 'std':std, 'skew':skew, 'anisotropy':anisotropy}
+            'mean':mean, 'std':std, 'skew':skew, 'anisotropy':anisotropy,
+            'left_lag':left_lag, 'right_lag':right_lag, 'left_sum':left_sum, 'right_sum':right_sum, 'cc':cc}
 
 
 def whiten(s, order):
