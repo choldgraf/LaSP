@@ -1,7 +1,8 @@
 import numpy as np
 import mne
 import pandas as pd
-from scipy.fftpack import fft,fftfreq,ifft
+from scipy.fftpack import fft,fftfreq,ifft,fftshift
+from scipy.ndimage import convolve1d
 from scipy.signal import filter_design, resample,filtfilt
 
 import matplotlib.pyplot as plt
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 import nitime.algorithms as ntalg
 import time
 from sklearn.decomposition import PCA,RandomizedPCA
+from sklearn.linear_model import Ridge
 from lasp.coherence import compute_mtcoherence
 
 
@@ -549,7 +551,7 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
                 start_index = t
                 max_amp = threshold
 
-    print '# of events (pre-merge): %d' % len(events)
+    # print '# of events (pre-merge): %d' % len(events)
     events = np.array(events)
 
     if merge_thresh is None:
@@ -590,7 +592,7 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
     #pop the last event
     merged_events.append( (estart, eend, eamp))
 
-    print '# of merged events: %d' % len(merged_events)
+    # print '# of merged events: %d' % len(merged_events)
 
     return np.array(merged_events)
 
@@ -617,3 +619,318 @@ def power_amplifier(s, thresh, pwr=2):
     s /= s.max()
 
     return s
+
+
+def phase_locking_value(z1, z2):
+    """ Compute the phase-locking-value (PLV) between two complex signals. """
+
+    assert len(z1) == len(z2), "Signals must be same length! len(z1)=%d, len(z2)=%d" % (len(z1), len(z2))
+    N = len(z1)
+    theta = np.angle(z2) - np.angle(z1)
+
+    p = np.exp(complex(0, 1)*theta)
+    plv = np.abs(p.sum()) / N
+
+    return plv
+
+
+def correlation_function(s1, s2, lags):
+    """ Computes the cross-correlation function between signals s1 and s2. The cross correlation function is defined as:
+
+            cf(k) = sum_over_t( (s1(t) - s1.mean()) * (s2(t+k) - s2.mean()) ) / s1.std()*s2.std()
+
+    :param s1: The first signal.
+    :param s2: The second signal.
+    :param lags: An array of integers indicating the lags. The lags are in units of sample period.
+    :return: cf The cross correlation function evaluated at the lags.
+    """
+    
+    assert len(s1) == len(s2), "Signals must be same length! len(s1)=%d, len(s2)=%d" % (len(s1), len(s2))
+    assert np.sum(np.isnan(s1)) == 0, "There are NaNs in s1"
+    assert np.sum(np.isnan(s2)) == 0, "There are NaNs in s2"
+
+    s1_mean = s1.mean()
+    s2_mean = s2.mean()
+    s1_std = s1.std(ddof=1)
+    s2_std = s2.std(ddof=1)
+    s1_centered = s1 - s1_mean
+    s2_centered = s2 - s2_mean
+    N = len(s1)
+
+    assert N > lags.max(), "Lags are too long, length of signal is %d, lags.max()=%d" % (N, lags.max())
+
+    cf = np.zeros([len(lags)])
+    for k,lag in enumerate(lags):
+
+        if lag == 0:
+            cf[k] = np.dot(s1_centered, s2_centered) / N
+        elif lag > 0:
+            cf[k] = np.dot(s1_centered[:-lag], s2_centered[lag:]) / (N-lag)
+            """
+            if np.isnan(cf[k]):
+                print 's1_centered=',s1_centered[:-lag]
+                print 's2_centered=',s2_centered[lag:]
+                plt.figure()
+                plt.plot(s1_centered[:-lag], 'r-')
+                plt.plot(s2_centered[lag:], 'b-')
+                plt.legend(['s1', 's2'])
+                plt.axis('tight')
+                print 'There is a nan, lag=%d, k=%d, N=%d, len(s1_centered)=%d, len(s2_centered)=%d...' % (lag, k, N, len(s1_centered), len(s2_centered))
+                plt.show()
+            """
+
+        elif lag < 0:
+            cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N+lag)
+
+    cf /= s1_std * s2_std
+
+    return cf
+
+
+def coherency(s1, s2, lags, plot=False, window_fraction=None, noise_floor_db=None):
+    """ Compute the coherency between two signals s1 and s2.
+
+    :param s1: The first signal.
+    :param s2: The second signal.
+    :param lags: The lags to compute the coherency. They must be symmetric around zero, like lags=np.arange(-10, 11, 1).
+    :param window_fraction: If not None, then each correlation function and auto-correlation-function is multiplied
+            by a Gaussian window with standard deviation=window_fraction*lags.max(), prior to being turned into the
+            coherency. This maybe suppresses high frequency noise in the coherency function.
+    :param noise_floor_db: The threshold in decibels to zero out power in the auto and cross correlation function
+            power spectrums, prior to taking the inverse FFT to produce the coherence. This is another way of
+            eliminating high frequency noise in the coherency.
+
+    :return: coh - The lags used to compute the coherency in units of time steps, and the coherency function.
+    """
+
+    # test for symmetry
+    i = len(lags) / 2
+    assert lags[i] == 0, "Midpoint of lags must be zero for coherency!"
+    assert np.sum(-lags[:i] != lags[-i:][::-1]) == 0, "lags must be symmetric for coherency!"
+
+    window = np.ones([len(lags)], dtype='float')
+    if window_fraction is not None:
+        assert window_fraction > 0 and window_fraction <= 1, "window_fraction must be between 0 and 1"
+        # create a gaussian windowing function for the CF and ACFs
+        window = np.exp(-lags**2 / (window_fraction*lags.max())**2)
+
+    # do an FFT shift to the lags and the window, otherwise the FFT of the ACFs is not equal to the power
+    # spectrum for some numerical reason
+    window = fftshift(window)
+    shift_lags = fftshift(lags)
+    if len(lags) % 2 == 1:
+        # shift zero from end of shift_lags to beginning
+        shift_lags = np.roll(shift_lags, 1)
+        window = np.roll(window, 1)
+
+    cf = correlation_function(s1, s2, shift_lags)
+    acf1 = correlation_function(s1, s1, shift_lags)
+    acf2 = correlation_function(s2, s2, shift_lags)
+
+    if np.sum(np.isnan(cf)) > 0:
+        # print 'len(lags)=%d, len(s1)=%d, len(s2)=%d' % (len(lags), len(s1), len(s2))
+        print 'signals=',zip(s1, s2)
+        print 'shift_lags,cf=',zip(shift_lags, cf)
+        raise Exception("Nans in cf")
+
+    assert np.sum(np.isnan(acf1)) == 0, "Nans in acf1"
+    assert np.sum(np.isnan(acf2)) == 0, "Nans in acf2"
+
+    if window_fraction is not None:
+        cf *= window
+        acf1 *= window
+        acf2 *= window
+
+    cf_fft = fft(cf)
+    acf1_fft = fft(acf1)
+    acf2_fft = fft(acf2)
+
+    acf1_ps = np.abs(acf1_fft)
+    acf2_ps = np.abs(acf2_fft)
+
+    # determine which points are noise (with magnitudes too low to be useful) in the acfs
+    zeros = np.zeros([len(cf_fft)], dtype='bool')
+    if noise_floor_db is not None:
+        db1 = 20*np.log10(acf1_ps / acf1_ps.max()) + noise_floor_db
+        z1 = db1 <= 0
+
+        db2 = 20*np.log10(acf2_ps / acf2_ps.max()) + noise_floor_db
+        z2 = db2 <= 0
+        zeros = z1 | z2
+
+    assert np.abs(acf1_fft.imag).max() < 1e-8, "acf1_fft.imag.max()=%f" % np.abs(acf1_fft.imag).max()
+    assert np.abs(acf2_fft.imag).max() < 1e-8, "acf2_fft.imag.max()=%f" % np.abs(acf2_fft.imag).max()
+
+    cpre = cf_fft / np.sqrt(acf1_ps*acf2_ps)
+    cpre[zeros] = 0
+    c = ifft(cpre)
+    assert np.abs(c.imag).max() < 1e-8, "np.abs(c.imag).max()=%f" % np.abs(c.imag).max()
+
+    coh = fftshift(c.real)
+    freq = fftshift(fftfreq(len(lags)))
+    fi = freq >= 0
+
+    if np.sum(np.abs(coh) > 1) > 0:
+        print 'Warning: coherency is > 1!'
+
+    if plot:
+        plt.figure()
+        plt.subplot(2, 3, 1)
+        plt.plot(s1, 'r-')
+        plt.plot(s2, 'b-')
+        plt.legend(['s1', 's2'])
+        plt.xlabel('Time')
+        plt.axis('tight')
+        plt.title('Signals')
+
+        plt.subplot(2, 3, 2)
+        plt.axvline(0, c='k')
+        plt.axhline(0, c='k')
+        l1 = plt.plot(lags, fftshift(acf1), 'r-')
+        l2 = plt.plot(lags, fftshift(acf2), 'b-')
+        l3 = plt.plot(lags, fftshift(cf), 'g-')
+        plt.title('Correlation Functions')
+        plt.xlabel('Lags')
+        plt.legend(['', '', 'ACF1', 'ACF2', 'CF12'])
+        plt.axis('tight')
+        plt.ylim(-0.5, 1.0)
+
+        plt.subplot(2, 3, 3)
+        plt.axhline(0, c='k', alpha=0.75)
+        plt.axvline(0, c='k', alpha=0.75)
+        plt.plot(lags, coh, 'm-')
+        plt.ylabel('Coherency')
+        plt.xlabel('Lag')
+        plt.axis('tight')
+        plt.title('Coherency')
+
+        plt.subplot(2, 3, 4)
+        plt.plot(freq[fi], fftshift(acf1_ps)[fi], 'r')
+        plt.plot(freq[fi], fftshift(acf2_ps)[fi], 'b')
+        cf_ps = fftshift(np.abs(cf_fft))
+        cf_pre_ps = fftshift(np.abs(cpre))
+        plt.plot(freq[fi], cf_ps[fi], 'g--')
+        plt.plot(freq[fi], cf_pre_ps[fi], 'm-')
+        plt.legend(['ACF1', 'ACF2', 'CF12', 'CPRE'])
+        plt.ylabel('Power (raw)')
+        plt.xlabel('Frequency')
+        plt.axis('tight')
+        plt.title('Raw Power Spectra')
+
+        if noise_floor_db:
+            plt.subplot(2, 3, 5)
+            plt.axhline(0, c='k')
+            plt.plot(freq[fi], fftshift(db1)[fi], 'r')
+            plt.plot(freq[fi], fftshift(db2)[fi], 'b')
+            plt.legend(['ACF1', 'ACF2'])
+            plt.ylabel('Power (dB)')
+            plt.xlabel('Frequency')
+            plt.axis('tight')
+            plt.title('Log Power Spectra')
+
+        plt.show()
+
+    return coh
+
+
+def get_envelope_end(env):
+    """ Given an amplitude envelope, get the index that indicates the derivative of the envelope
+        has converged to zero, indicating an end point.
+    """
+    denv = np.diff(env)
+    i = np.where(np.abs(denv) > 0)[0]
+    true_stop_index = np.max(i)+1
+    return true_stop_index
+
+
+def simple_smooth(s, window_len):
+
+    w = np.hanning(window_len)
+    w /= w.sum()
+    return convolve1d(s, w)
+
+
+def quantify_cf(lags, cf, plot=False):
+    """ Quantify properties of an auto or cross correlation function. """
+
+    # identify the peak magnitude
+    abs_cf = np.abs(cf)
+    peak_magnitude = abs_cf.max()
+
+    # identify the peak delay
+    imax = abs_cf.argmax()
+    peak_delay = lags[imax]
+
+    # compute the area under the curve
+    dt = np.diff(lags).max()
+    cf_width = abs_cf.sum()*dt
+
+    # compute the skewdness
+    p = abs_cf / abs_cf.sum()
+    mean = np.sum(lags*p)
+    std = np.sqrt(np.sum(p*(abs_cf - mean)**2))
+    skew = np.sum(p*(abs_cf - mean)**3) / std**3
+
+    # compute the left and right areas under the absolute curve
+    max_width = abs_cf[lags != 0].sum()*dt
+    right_width = abs_cf[lags > 0].sum()*dt
+    left_width = abs_cf[lags < 0].sum()*dt
+
+    # create a measure of anisotropy from the AUCs
+    anisotropy = (right_width - left_width) / max_width
+    
+    li = lags < 0
+    ri = lags > 0
+
+    # determine the mean lag time, i.e. the lag "center of mass". do this for each half
+    cfl = np.abs(cf[li]) / np.abs(cf[li]).sum()
+    left_lag = np.sum(cfl*lags[li])
+    cfr = np.abs(cf[ri]) / np.abs(cf[ri]).sum()
+    right_lag = np.sum(cfr*lags[ri])
+
+    # integrate the right and left sides independently
+    dl = np.diff(lags).max()
+    left_sum = cf[li].sum()*dl
+    right_sum = cf[ri].sum()*dl
+
+    # take the correlation coefficient at zero lag
+    cc = cf[lags == 0][0]
+
+    if plot:
+        plt.figure()
+        plt.axhline(0, c='k')
+        plt.plot(lags, cf, 'r-', linewidth=3)
+        plt.axvline(peak_delay, c='g', alpha=0.75)
+        plt.ylim(-1, 1)
+        plt.axis('tight')
+        t = 'width=%0.1f, mean=%0.1f, std=%0.1f, skew=%0.1f, anisotropy=%0.2f' % (cf_width, mean, std, skew, anisotropy)
+        plt.title(t)
+        plt.show()
+
+    return {'magnitude':peak_magnitude, 'delay':peak_delay, 'width':cf_width,
+            'mean':mean, 'std':std, 'skew':skew, 'anisotropy':anisotropy,
+            'left_lag':left_lag, 'right_lag':right_lag, 'left_sum':left_sum, 'right_sum':right_sum, 'cc':cc}
+
+
+def whiten(s, order):
+    """ Whiten the signal s with an auto-regressive model of order specified by "order".
+
+        :returns sw,coef sw is the whitened signal (original signal minus prediction), coef is coefficients of AR model
+    """
+
+    # remove the mean of the signal
+    sm = s - s.mean()
+
+    # construct a feature matrix
+    X = np.zeros([len(s)-1, order])
+    for k in range(order):
+        X[k:, k] = sm[k:-1]
+
+    # do a regression
+    y = sm[1:]
+
+    reg = Ridge(alpha=0, fit_intercept=False)
+    reg.fit(X, y)
+    spred = reg.predict(X)
+
+    return sm - np.r_[0, spred], reg.coef_
