@@ -529,10 +529,10 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None, max_amp_thresh
 
     assert np.sum(s < 0) == 0, "segment_envelope: Can't segment a signal that has negative values!"
 
-    #array to keep track of start and end times of each event
+    # array to keep track of start and end times of each event
     events = list()
 
-    #scan through the signal, find events
+    # scan through the signal, find events
     in_event = False
     max_amp = -np.inf
     start_index = -1
@@ -540,12 +540,13 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None, max_amp_thresh
 
         if in_event:
             if x > max_amp:
-                #we found a new peak
+                # we found a new peak
                 max_amp = x
             if x <= threshold:
-                #the event has ended
+                # the event has ended
                 in_event = False
                 events.append( (start_index, t, max_amp))
+                start_index = -1
                 #print 'Identified event (%d, %d, %0.6f)' % (start_index, t, max_amp)
         else:
             if x > threshold:
