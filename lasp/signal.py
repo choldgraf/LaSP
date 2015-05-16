@@ -513,7 +513,7 @@ def compute_coherence_over_time(signal, trials, Fs, n_perm=5, low=0, high=300):
     return coh_perm, coh_freqs
 
 
-def break_envelope_into_events(s, threshold=0, merge_thresh=None):
+def break_envelope_into_events(s, threshold=0, merge_thresh=None, max_amp_thresh=None):
     """ Segments a one dimensional positive-valued time series into events with start and end times.
 
     :param s: The signal, a numpy array.
@@ -522,6 +522,8 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
             threshold, the event ends.
     :param merge_thresh: Events that are separated by less than minimum_len get merged together. minimum_len
             must be specified in number of time points, not actual time.
+    :param max_amp_thresh: If not None, events whose maximum amplitude is below max_amp_thresh are discarded.
+
     :return: A list of event start and end times, and the maximum amplitude encountered in that event.
     """
 
@@ -551,8 +553,21 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
                 start_index = t
                 max_amp = threshold
 
+    # get the last event if there is one
+    if start_index != -1:
+        events.append( (start_index, len(s)-1, max_amp))
+
     # print '# of events (pre-merge): %d' % len(events)
     events = np.array(events)
+
+    # discard any events whose maximum amplitude is less than max_amp_thresh
+    if max_amp_thresh is not None:
+        events2 = list()
+        for si,ei,max_amp in events:
+            if max_amp >= max_amp_thresh:
+                events2.append( (si, ei, max_amp))
+        events = np.array(events2)
+        del events2
 
     if merge_thresh is None:
         return events
