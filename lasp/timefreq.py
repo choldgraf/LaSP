@@ -304,6 +304,21 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
 
 def wavelet_scalogram(s, sample_rate, increment, frequencies=None, min_freq=1, max_freq=512, num_cycles_per_window=10,
                       num_freqs=20, nstd=6):
+    """ Create a time frequency representation of the signal s by constructing a wavelet scalogram. Morelet wavelets
+        are used.
+
+    :param s: The signal, a 1D array.
+    :param sample_rate: The sample rate of the signal in Hz.
+    :param increment: The spacing in seconds between points where the windowed wavelet convolution is taken.
+    :param frequencies: The center frequencies of each wavelet.
+    :param min_freq: If frequencies is not specified, then the minimum center frequency to analyze.
+    :param max_freq: If frequencies is not specified, then the maximum center frequency to analyze.
+    :param num_cycles_per_window: The number of cycles for a given wavelet in a window.
+    :param num_freqs: If frequencies is not specified, then the number of center frequencies between min_freq and max_freq.
+    :param nstd: The number of standard deviations to consider for the Gaussian window when keeping the number of cycles constant.
+
+    :return: (t, freq, tf) - t is a vector of time points, freq is an array of frequencies, tf is the time-frequency scalogram.
+    """
     est = WaveletSpectrumEstimator(frequencies=frequencies, num_cycles_per_window=num_cycles_per_window,
                                    min_freq=min_freq, max_freq=max_freq, num_freqs=num_freqs, nstd=nstd)
     return timefreq(s, sample_rate, None, increment, spectrum_estimator=est, min_freq=min_freq, max_freq=max_freq)
