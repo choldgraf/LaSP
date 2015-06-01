@@ -650,7 +650,7 @@ def phase_locking_value(z1, z2):
     return plv
 
 
-def correlation_function(s1, s2, lags):
+def correlation_function(s1, s2, lags, normalize=True):
     """ Computes the cross-correlation function between signals s1 and s2. The cross correlation function is defined as:
 
             cf(k) = sum_over_t( (s1(t) - s1.mean()) * (s2(t+k) - s2.mean()) ) / s1.std()*s2.std()
@@ -658,6 +658,7 @@ def correlation_function(s1, s2, lags):
     :param s1: The first signal.
     :param s2: The second signal.
     :param lags: An array of integers indicating the lags. The lags are in units of sample period.
+    :param normalize: If True, then divide the correlation function by the product of standard deviations of s1 and s2.
     :return: cf The cross correlation function evaluated at the lags.
     """
     
@@ -698,7 +699,8 @@ def correlation_function(s1, s2, lags):
         elif lag < 0:
             cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N+lag)
 
-    cf /= s1_std * s2_std
+    if normalize:
+        cf /= s1_std * s2_std
 
     return cf
 
