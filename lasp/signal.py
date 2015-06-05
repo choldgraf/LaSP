@@ -650,7 +650,7 @@ def phase_locking_value(z1, z2):
     return plv
 
 
-def correlation_function(s1, s2, lags, normalize=True):
+def correlation_function(s1, s2, lags, mean_subtract=True, normalize=True):
     """ Computes the cross-correlation function between signals s1 and s2. The cross correlation function is defined as:
 
             cf(k) = sum_over_t( (s1(t) - s1.mean()) * (s2(t+k) - s2.mean()) ) / s1.std()*s2.std()
@@ -658,6 +658,7 @@ def correlation_function(s1, s2, lags, normalize=True):
     :param s1: The first signal.
     :param s2: The second signal.
     :param lags: An array of integers indicating the lags. The lags are in units of sample period.
+    :param mean_subtract: If True, subtract the mean of s1 from s1, and the mean of s2 from s2, which is the standard thing to do.
     :param normalize: If True, then divide the correlation function by the product of standard deviations of s1 and s2.
     :return: cf The cross correlation function evaluated at the lags.
     """
@@ -666,8 +667,12 @@ def correlation_function(s1, s2, lags, normalize=True):
     assert np.sum(np.isnan(s1)) == 0, "There are NaNs in s1"
     assert np.sum(np.isnan(s2)) == 0, "There are NaNs in s2"
 
-    s1_mean = s1.mean()
-    s2_mean = s2.mean()
+    s1_mean = 0
+    s2_mean = 0
+    if mean_subtract:
+        s1_mean = s1.mean()
+        s2_mean = s2.mean()
+
     s1_std = s1.std(ddof=1)
     s2_std = s2.std(ddof=1)
     s1_centered = s1 - s1_mean
