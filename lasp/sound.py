@@ -12,7 +12,7 @@ import h5py
 
 import numpy as np
 from scipy.io.wavfile import read as read_wavfile
-from scipy.fftpack import fft,fftfreq,fft2,dct
+from scipy.fftpack import fft,fftfreq,fft2,ifft2,dct
 from scipy.signal import resample, firwin, filtfilt
 from scipy.optimize import leastsq
 import scikits.talkbox as talkbox
@@ -96,6 +96,10 @@ class WavFile():
         self.spectrogram = spec
         self.spectrogram_rms = spec_rms
         self.analyzed = True
+
+    def reanalyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=25.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True):
+        self.analyzed = False
+        return self.analyze(min_freq, max_freq, spec_sample_rate, freq_spacing, envelope_cutoff_freq, noise_level_db, rectify)
 
     def plot(self, fig=None, show_envelope=True, min_freq=0.0, max_freq=10000.0, colormap=cmap.gist_yarg, noise_level_db=80):
 
@@ -518,7 +522,7 @@ def play_sound_array(data, sample_rate):
     p.terminate()
 
 
-def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True):
+def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True, cmplx = True):
     """
         Given a sound pressure waveform, compute the log spectrogram. See documentation on gaussian_stft for arguments and return values.
 
@@ -529,6 +533,9 @@ def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_
     increment = 1.0 / spec_sample_rate
     window_length = nstd / (2.0*np.pi*freq_spacing)
     t,freq,timefreq,rms = gaussian_stft(s, sample_rate, window_length, increment, nstd=nstd, min_freq=min_freq, max_freq=max_freq)
+
+    if cmplx:
+        return t, freq, timefreq, rms
 
     if log:
         #create log spectrogram (power in decibels)
@@ -1225,3 +1232,62 @@ def fundEstimator(soundIn, fs, t=None, debugFig = 0, maxFund = 1500, minFund = 3
 
 
 
+def get_mps(t, freq, spec):
+    "Computes the MPS of a spectrogram (idealy a log-spectrogram) or other REAL time-freq representation"
+    mps = fftshift(fft2(spec))
+    amps = np.real(mps * np.conj(mps))
+    nf = mps.shape[0]
+    nt = mps.shape[1]
+    wfreq = fftshift(fftfreq(nf, d=freq[1] - freq[0]))
+    wt = fftshift(fftfreq(nt, d=t[1] - t[0]))
+    return wt, wfreq, mps, amps
+
+def inverse_mps(mps):
+    "Inverts a MPS back to a spectrogram"
+    spec = ifft2(ifftshift(mps))
+    return spec
+
+
+
+"""
+def inverse_spec(t, freq, spec):
+    "Naive attempt of inverting the spectrogram"
+    s2 = np.zeros(len(wf.data))
+    for j in range(len(spec[0])):
+        for i in range(len(spec)):
+            s2 += spec[i][j] * np.exp(2j*np.pi*T*freq[i])
+        print j
+        break
+    return s2
+
+def inverse_real_spectrogram(t, freq, spec, log=True, iterations=10):
+    "inverts a real spectrogram into a signal using the griffith/lim algorithm given:"
+    spec_magnitude = spec.copy()
+    if log:
+        spec_magnitude = 10**(spec_magnitude)
+
+    #estimated = inverse_spectrogram( ... )
+
+    for i in range(iterations):
+        spec_angle = np.angle(spectrogram(estimated))
+        estimated_spec = spec_magnitude * np.exp(1j*spec_angle)
+        estimated = inverse_spectrogram( spec_magnitude, spec_angle)
+
+    return estimated
+
+def inverse_spectrogram(t, freq, spec, log):
+    "turns the complex spectrogram into a signal"
+    return
+
+
+def play_signal(s, normalize = False):
+    "quick and easy temporary play"
+    wf = WavFile()
+    wf.sample_rate = 44100 #standard samp rate
+    wf.data = s
+    wf.to_wav("/tmp/README.wav", normalize)
+    play_sound("/tmp/README.wav")
+
+#(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True, cmplx = True):
+    
+"""
