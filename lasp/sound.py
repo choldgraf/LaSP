@@ -1,7 +1,7 @@
 import copy
 import fnmatch
 from math import ceil
-from numpy.fft import fftshift
+from numpy.fft import fftshift, ifftshift
 import os
 import subprocess
 import wave
@@ -12,7 +12,7 @@ import h5py
 
 import numpy as np
 from scipy.io.wavfile import read as read_wavfile
-from scipy.fftpack import fft,fftfreq,fft2,ifft2,dct
+from scipy.fftpack import fft,ifft,fftfreq,fft2,ifft2,dct
 from scipy.signal import resample, firwin, filtfilt
 from scipy.optimize import leastsq
 import scikits.talkbox as talkbox
@@ -62,7 +62,7 @@ class WavFile():
         wf.writeframes(''.join(hex_sound))
         wf.close()
 
-    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True):
+    def analyze(self, min_freq=0, max_freq=None, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True, cmplx=False):
         if self.analyzed:
             return
 
@@ -74,7 +74,10 @@ class WavFile():
         #compute log power spectrum
         fftx = fft(self.data)
         ps_f = fftfreq(len(self.data), d=(1.0 / self.sample_rate))
-        findx = (ps_f > min_freq) & (ps_f < max_freq)
+        if max_freq == None:
+            findx = (ps_f > min_freq) & (ps_f < np.inf)
+        else:
+            findx = (ps_f > min_freq) & (ps_f < max_freq)
         self.power_spectrum = np.log10(np.abs(fftx[findx]))
         self.power_spectrum_f = ps_f[findx]
 
@@ -90,16 +93,16 @@ class WavFile():
         #compute log spectrogram
         t,f,spec,spec_rms = spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate,
                                         freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq,
-                                        log=self.log_spectrogram, noise_level_db=noise_level_db, rectify=rectify)
+                                        log=self.log_spectrogram, noise_level_db=noise_level_db, rectify=rectify, cmplx=cmplx)
         self.spectrogram_t = t
         self.spectrogram_f = f
         self.spectrogram = spec
         self.spectrogram_rms = spec_rms
         self.analyzed = True
 
-    def reanalyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=25.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True):
+    def reanalyze(self, min_freq=0, max_freq=None, spec_sample_rate=1000.0, freq_spacing=25.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True, cmplx=False):
         self.analyzed = False
-        return self.analyze(min_freq, max_freq, spec_sample_rate, freq_spacing, envelope_cutoff_freq, noise_level_db, rectify)
+        return self.analyze(min_freq, max_freq, spec_sample_rate, freq_spacing, envelope_cutoff_freq, noise_level_db, rectify, cmplx)
 
     def plot(self, fig=None, show_envelope=True, min_freq=0.0, max_freq=10000.0, colormap=cmap.gist_yarg, noise_level_db=80):
 
@@ -1249,37 +1252,6 @@ def inverse_mps(mps):
 
 
 
-"""
-def inverse_spec(t, freq, spec):
-    "Naive attempt of inverting the spectrogram"
-    s2 = np.zeros(len(wf.data))
-    for j in range(len(spec[0])):
-        for i in range(len(spec)):
-            s2 += spec[i][j] * np.exp(2j*np.pi*T*freq[i])
-        print j
-        break
-    return s2
-
-def inverse_real_spectrogram(t, freq, spec, log=True, iterations=10):
-    "inverts a real spectrogram into a signal using the griffith/lim algorithm given:"
-    spec_magnitude = spec.copy()
-    if log:
-        spec_magnitude = 10**(spec_magnitude)
-
-    #estimated = inverse_spectrogram( ... )
-
-    for i in range(iterations):
-        spec_angle = np.angle(spectrogram(estimated))
-        estimated_spec = spec_magnitude * np.exp(1j*spec_angle)
-        estimated = inverse_spectrogram( spec_magnitude, spec_angle)
-
-    return estimated
-
-def inverse_spectrogram(t, freq, spec, log):
-    "turns the complex spectrogram into a signal"
-    return
-
-
 def play_signal(s, normalize = False):
     "quick and easy temporary play"
     wf = WavFile()
@@ -1288,6 +1260,52 @@ def play_signal(s, normalize = False):
     wf.to_wav("/tmp/README.wav", normalize)
     play_sound("/tmp/README.wav")
 
-#(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True, cmplx = True):
+
+
+def inverse_spectrogram(spec, s_len,
+    sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True):
+    """turns the complex spectrogram into a signal
+
+    inverts by repeating the process on a string-of-ones
+    """
+
+    spec_copy = spec.copy()
+    if log:
+        spec_copy = 10**(spec_copy)
+    spec_tranpose = spec.transpose() # spec_tranpose[time][frequency]
+
+    hnwinlen = len(spec) - 1
+    nincrement = int(np.round(float(sample_rate)/spec_sample_rate))
+
+    gauss_t = np.arange(-hnwinlen, hnwinlen+1, 1.0)
+    gauss_std = float(2*hnwinlen) / float(nstd)
+    gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
     
-"""
+    s = np.zeros(s_len + 2*hnwinlen+1)
+    w = np.zeros(s_len + 2*hnwinlen+1)
+
+    for i in range(len(spec_tranpose)):
+        sample = i * nincrement
+        spec_slice = np.concatenate((spec_tranpose[i][:0:-1].conj(), spec_tranpose[i]))
+        s[sample:sample+2*hnwinlen+1] += gauss_window * ifft(ifftshift(spec_slice))
+        w[sample:sample+2*hnwinlen+1] += gauss_window ** 2
+    s /= w
+    return s[hnwinlen:hnwinlen+s_len]
+
+
+def inverse_real_spectrogram(spec, s_len,
+    sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True, iterations = 10):
+    "inverts a real spectrogram into a signal using the griffith/lim algorithm"
+    spec_magnitude = spec.copy()
+
+    if log:
+        spec_magnitude = 10**spec_magnitude
+    estimated = inverse_spectrogram(spec_magnitude, s_len, sample_rate, spec_sample_rate, freq_spacing, min_freq, max_freq, nstd, log=False)
+    for i in range(iterations):
+        phase_spec = spectrogram(estimated, sample_rate, spec_sample_rate, freq_spacing, min_freq, max_freq, nstd, log=False)[2]
+        error = ((abs(spec_magnitude) - abs(phase_spec))**2).sum() / (abs(spec_magnitude)**2).sum()
+        print "the error after iteration", i+1, " is", error
+        spec_angle = np.angle(phase_spec)
+        estimated_spec = spec_magnitude * np.exp(1j*spec_angle)
+        estimated = inverse_spectrogram(estimated_spec, s_len, sample_rate, spec_sample_rate, freq_spacing, min_freq, max_freq, nstd, log=False)
+    return estimated
