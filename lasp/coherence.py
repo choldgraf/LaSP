@@ -773,3 +773,38 @@ def mt_cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, band
     else:
         return t,freq,timefreq
 
+
+def cross_spectral_density(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=np.inf):
+    """ Computes the cross-spectral density between signals s1 and s2 by computing the product of their power spectra.
+        First the Gaussian-windowed spectrograms of s1 and s2 are computed, then the product of the power spectra
+        at each time point is computed, then the products are averaged across time to produce an estimate of the
+        cross spectral density.
+
+    :param s1: The first signal.
+    :param s2: The second signal.
+    :param sample_rate: The sample rates of the signals.
+    :param window_length: The length of the window used to compute the STFT (units=seconds)
+    :param increment: The spacing between the points of the STFT  (units=seconds)
+    :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
+    :param max_freq: The maximum frequency to analysize (units=Hz, default=nyquist frequency)
+
+    :return: freq,csd: The frequency bands evaluated, and the cross-spectral density.
+    """
+
+    # compute the complex-spectrograms of the signals
+    t1, freq1, tf1, rms1 = gaussian_stft(s1, sample_rate, window_length=window_length, increment=increment,
+                                         min_freq=min_freq, max_freq=max_freq)
+
+    t2, freq2, tf2, rms2 = gaussian_stft(s2, sample_rate, window_length=window_length, increment=increment,
+                                         min_freq=min_freq, max_freq=max_freq)
+
+    # multiply the complex spectrograms
+    csd = tf1*tf2
+
+    # take the power spectrum
+    csd = np.abs(csd)
+
+    # average across time
+    csd = csd.mean(axis=1)
+
+    return freq1,csd

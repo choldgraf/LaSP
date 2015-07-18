@@ -97,16 +97,27 @@ class CoherenceTestCase(TestCase):
         psd12 = np.abs(psd12[fi])
         psd12_freq = psd12_freq[fi]
 
-        # compute the coherence from the cross spectral density
-        coherence = psd12 / (ps1_auto*ps2_auto)
+        # compute the cross spectral density from the power spectra
+        psd12_welch = welch_psd1*welch_psd2
+        psd12_welch /= psd12_welch.max()
 
-        # zero out coherence where the cross spectral density is really low
-        psd12_thresh = np.percentile(psd12, 90)
-        print 'psd12_thresh=%f' % psd12_thresh
-        ti = psd12 < psd12_thresh
+        # compute the coherence from the cross spectral density
+        denom = np.sqrt(ps1_auto*ps2_auto)
+        coherence = psd12 / denom
+
+        # zero out coherence where the numerator is greater than the denominator
+        ti = (psd12 > denom) | (denom < 0.10*denom.max())
         print '# of points to zero out: %d' % ti.sum()
         coherence[ti] = 0
 
+        # compute the coherence from the fft of the coherency
+        coherence2 = fft(fftshift(coh12))
+        coherence2_freq = fftfreq(len(coherence2), d=1.0/sr)
+        fi = coherence2_freq > 0
+        coherence2 = np.abs(coherence2[fi])
+        coherence2_freq = coherence2_freq[fi]
+
+        """
         plt.figure()
         ax = plt.subplot(2, 1, 1)
         plt.plot(ps1_auto_freq, ps1_auto*ps2_auto, 'c-', linewidth=2.0, alpha=0.75)
@@ -119,10 +130,8 @@ class CoherenceTestCase(TestCase):
         ax = plt.subplot(2, 1, 2)
         plt.plot(psd12_freq, coherence, 'b-')
         plt.axis('tight')
-
-
-
         plt.show()
+        """
 
         # normalize the cross-spectral density and power spectra
         psd12 /= psd12.max()
@@ -171,21 +180,9 @@ class CoherenceTestCase(TestCase):
         ax = plt.subplot(nrows, ncols, 4)
         plt.plot(psd12_freq, psd12, 'g-', linewidth=2.0)
         plt.plot(psd12_freq, coherence, 'b-', linewidth=2.0, alpha=0.8)
+        plt.plot(coherence2_freq, coherence2, 'c-', linewidth=2.0, alpha=0.9)
+        plt.plot(welch_freq1, psd12_welch, 'r-', linewidth=2.0, alpha=0.9)
         plt.xlabel('Frequency (Hz)')
         plt.ylabel('Cross-spectral Density')
 
         plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
