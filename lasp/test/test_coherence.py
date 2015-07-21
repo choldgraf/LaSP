@@ -18,7 +18,7 @@ class CoherenceTestCase(TestCase):
 
     def test_cross_psd(self):
 
-        np.random.seed(123456)
+        np.random.seed(1234567)
         sr = 1000.0
         dur = 1.0
         nt = int(dur*sr)
@@ -180,8 +180,8 @@ class CoherenceTestCase(TestCase):
         ax = plt.subplot(nrows, ncols, 4)
         plt.plot(psd12_freq, psd12, 'g-', linewidth=2.0)
         plt.plot(psd12_freq, coherence, 'b-', linewidth=2.0, alpha=0.8)
-        plt.plot(coherence2_freq, coherence2, 'c-', linewidth=2.0, alpha=0.9)
-        plt.plot(welch_freq1, psd12_welch, 'r-', linewidth=2.0, alpha=0.9)
+        # plt.plot(coherence2_freq, coherence2, 'c-', linewidth=2.0, alpha=0.9)
+        # plt.plot(welch_freq1, psd12_welch, 'r-', linewidth=2.0, alpha=0.9)
         plt.xlabel('Frequency (Hz)')
         plt.ylabel('Cross-spectral Density')
 

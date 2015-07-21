@@ -520,7 +520,7 @@ def compute_freq_cutoff_and_nmi(freq, sample_rate, coherence_mean, coherence_low
     return freq_cutoff,nminfo
 
 
-def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=None):
+def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=None, thresh=0.10):
     """ Computes the coherence between two signals by averaging across time-frequency representations
         created using a Gaussian-windowed Short-time Fourier Transform.
 
@@ -531,6 +531,9 @@ def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, ma
     :param increment: The spacing between the points of the STFT  (units=seconds)
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
     :param max_freq: The maximum frequency to analysize (units=Hz, default=nyquist frequency)
+    :param thresh: When both signals have a small amplitude for a given power spectrum frequency, the coherence
+            can numerically blow up. When thresh > 0, any points in the coherence where the product of power spectra
+            are less than thresh*(power spectrum product) are zeroed out.
 
     :return: freq,coherence: freq is an array of frequencies that the coherence was computed at. coherence is
              an array of length len(freq) that contains the coherence at each frequency.
@@ -543,15 +546,21 @@ def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, ma
                                          min_freq=min_freq, max_freq=max_freq)
 
     cross_spec12 = tf1*np.conj(tf2)
+    cross_spec12 = cross_spec12.mean(axis=1)
     cross_psd12 = np.abs(cross_spec12)
 
     ps1 = np.abs(tf1)
     ps2 = np.abs(tf2)
 
-    coherence = cross_psd12.mean(axis=1) / (ps1*ps2).mean(axis=1)
+    denom = ps1.mean(axis=1) * ps2.mean(axis=1)
 
-    # C = (np.abs(cross_spec12)*np.abs(cross_spec21)) / (np.abs(tf1)*np.abs(tf2))**2
-    # coherence = C.mean(axis=1)
+    coherence = cross_psd12 / denom
+
+    if thresh > 0:
+        ti = denom < thresh*denom.max()
+        coherence[ti] = 0
+        ti = cross_psd12 > denom
+        coherence[ti] = 1
 
     assert coherence.max() <= 1.0+1e-6, "coherence.max()=%f" % coherence.max()
     assert coherence.min() >= 0.0, "coherence.min()=%f" % coherence.min()
