@@ -1,3 +1,4 @@
+from copy import deepcopy
 from unittest import TestCase
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,6 +6,8 @@ from numpy.fft import fftfreq, fftshift
 from scipy.fftpack import fft
 from scipy.ndimage import convolve1d
 from scipy.signal import welch
+from lasp.coherence import coherence_jn
+from lasp.plots import custom_legend
 from lasp.signal import correlation_function, coherency, lowpass_filter, bandpass_filter
 
 
@@ -102,13 +105,14 @@ class CoherenceTestCase(TestCase):
         psd12_welch /= psd12_welch.max()
 
         # compute the coherence from the cross spectral density
-        denom = np.sqrt(ps1_auto*ps2_auto)
-        coherence = psd12 / denom
+        cfreq,coherence,coherence_var = coherence_jn(s1, s2, sample_rate=sr, window_length=0.050, increment=0.050)
 
-        # zero out coherence where the numerator is greater than the denominator
-        ti = (psd12 > denom) | (denom < 0.10*denom.max())
-        print '# of points to zero out: %d' % ti.sum()
-        coherence[ti] = 0
+        # weight the coherence by one minus the normalized standard deviation
+        coherence_std = np.sqrt(coherence_var)
+        # cweight = coherence_std / coherence_std.sum()
+        # coherence_weighted = (1.0 - cweight)*coherence
+        coherence_weighted = coherence - coherence_std
+        coherence_weighted[coherence_weighted < 0] = 0
 
         # compute the coherence from the fft of the coherency
         coherence2 = fft(fftshift(coh12))
@@ -178,11 +182,14 @@ class CoherenceTestCase(TestCase):
 
         # plot the cross spectral density
         ax = plt.subplot(nrows, ncols, 4)
-        plt.plot(psd12_freq, psd12, 'g-', linewidth=2.0)
-        plt.plot(psd12_freq, coherence, 'b-', linewidth=2.0, alpha=0.8)
-        # plt.plot(coherence2_freq, coherence2, 'c-', linewidth=2.0, alpha=0.9)
-        # plt.plot(welch_freq1, psd12_welch, 'r-', linewidth=2.0, alpha=0.9)
+        handles = custom_legend(['g', 'k', 'b'], ['CSD', 'Coherence', 'Weighted'])
+        plt.axhline(0, c='k')
+        plt.axhline(1, c='k')
+        plt.plot(psd12_freq, psd12, 'g-', linewidth=3.0)
+        plt.errorbar(cfreq, coherence, yerr=np.sqrt(coherence_var), fmt='k-', ecolor='r', linewidth=3.0, elinewidth=5.0, alpha=0.8)
+        plt.plot(cfreq, coherence_weighted, 'b-', linewidth=3.0, alpha=0.75)
         plt.xlabel('Frequency (Hz)')
-        plt.ylabel('Cross-spectral Density')
+        plt.ylabel('Cross-spectral Density/Coherence')
+        plt.legend(handles=handles)
 
         plt.show()

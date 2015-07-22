@@ -520,9 +520,10 @@ def compute_freq_cutoff_and_nmi(freq, sample_rate, coherence_mean, coherence_low
     return freq_cutoff,nminfo
 
 
-def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=None, thresh=0.10):
+def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=None):
     """ Computes the coherence between two signals by averaging across time-frequency representations
-        created using a Gaussian-windowed Short-time Fourier Transform.
+        created using a Gaussian-windowed Short-time Fourier Transform. Uses jacknifing to estimate
+        the variance of the coherence.
 
     :param s1: The first signal
     :param s2: The second signal
@@ -531,12 +532,10 @@ def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, ma
     :param increment: The spacing between the points of the STFT  (units=seconds)
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
     :param max_freq: The maximum frequency to analysize (units=Hz, default=nyquist frequency)
-    :param thresh: When both signals have a small amplitude for a given power spectrum frequency, the coherence
-            can numerically blow up. When thresh > 0, any points in the coherence where the product of power spectra
-            are less than thresh*(power spectrum product) are zeroed out.
 
-    :return: freq,coherence: freq is an array of frequencies that the coherence was computed at. coherence is
-             an array of length len(freq) that contains the coherence at each frequency.
+    :return: freq,coherence,coherence_var: freq is an array of frequencies that the coherence was computed
+             at. coherence is an array of length len(freq) that contains the coherence at each frequency.
+             c_var is the variance of the coherence.
     """
 
     t1, freq1, tf1, rms1 = gaussian_stft(s1, sample_rate, window_length=window_length, increment=increment,
@@ -546,27 +545,36 @@ def stft_coherence(s1, s2, sample_rate, window_length, increment, min_freq=0, ma
                                          min_freq=min_freq, max_freq=max_freq)
 
     cross_spec12 = tf1*np.conj(tf2)
-    cross_spec12 = cross_spec12.mean(axis=1)
-    cross_psd12 = np.abs(cross_spec12)
+    ps1 = np.abs(tf1)**2
+    ps2 = np.abs(tf2)**2
 
-    ps1 = np.abs(tf1)
-    ps2 = np.abs(tf2)
+    # make leave-one-out estimates of the complex coherence
+    jn_estimates = list()
+    njn = tf1.shape[1]
+    for k in range(njn):
+        i = np.ones([njn], dtype='bool')
+        i[k] = False
+        csd = cross_spec12[:, i].sum(axis=1)
+        denom = ps1[:, i].sum(axis=1)*ps2[:, i].sum(axis=1)
+        c = np.abs(csd) / np.sqrt(denom)
+        jn_estimates.append(c)
+    jn_estimates = np.array(jn_estimates)
 
-    denom = ps1.mean(axis=1) * ps2.mean(axis=1)
+    # estimate the variance of the coherence
+    jn_mean = jn_estimates.mean(axis=0)
+    jn_diff = (jn_estimates - jn_mean)**2
+    c_var = ((njn-1) / float(njn)) * jn_diff.sum(axis=0)
 
-    coherence = cross_psd12 / denom
+    # compute the coherence using all the data
+    csd = cross_spec12.sum(axis=1)
+    denom = ps1.sum(axis=1)*ps2.sum(axis=1)
+    c = np.abs(csd) / np.sqrt(denom)
 
-    if thresh > 0:
-        ti = denom < thresh*denom.max()
-        coherence[ti] = 0
-        ti = cross_psd12 > denom
-        coherence[ti] = 1
+    assert c.max() <= 1.0, "c.max()=%f" % c.max()
+    assert c.min() >= 0.0, "c.min()=%f" % c.min()
+    assert np.sum(np.isnan(c)) == 0, "NaNs in c!"
 
-    assert coherence.max() <= 1.0+1e-6, "coherence.max()=%f" % coherence.max()
-    assert coherence.min() >= 0.0, "coherence.min()=%f" % coherence.min()
-    assert np.sum(np.isnan(coherence)) == 0, "NaNs in coherence!"
-
-    return freq1,coherence
+    return freq1,c,c_var
 
 
 def compute_coherence_from_timefreq(tf1, tf2, sample_rate, window_size, gauss_window=False, nstd=6):
