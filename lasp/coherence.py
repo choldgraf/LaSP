@@ -531,7 +531,7 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     :param window_length: The length of the window used to compute the STFT (units=seconds)
     :param increment: The spacing between the points of the STFT  (units=seconds)
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
-    :param max_freq: The maximum frequency to analysize (units=Hz, default=nyquist frequency)
+    :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
 
     :return: freq,coherence,coherence_var: freq is an array of frequencies that the coherence was computed
              at. coherence is an array of length len(freq) that contains the coherence at each frequency.
@@ -575,6 +575,48 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     assert np.sum(np.isnan(c)) == 0, "NaNs in c!"
 
     return freq1,c,c_var
+
+
+def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_freq=None):
+    """ Computes the power spectrum of a signal by averaging across time-frequency representation
+        created using a Gaussian-windowed Short-time Fourier Transform. Uses jacknifing to estimate
+        the variance of the spectra.
+
+    :param s: The first signal
+    :param sample_rate: The sample rates of the signal.
+    :param window_length: The length of the window used to compute the STFT (units=seconds)
+    :param increment: The spacing between the points of the STFT  (units=seconds)
+    :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
+    :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
+
+    :return: freq,coherence,coherence_var: freq is an array of frequencies that the coherence was computed
+             at. coherence is an array of length len(freq) that contains the coherence at each frequency.
+             c_var is the variance of the coherence.
+    """
+
+    t, freq, tf, rms = gaussian_stft(s, sample_rate, window_length=window_length, increment=increment,
+                                         min_freq=min_freq, max_freq=max_freq)
+    ps = np.abs(tf)**2
+
+    # make leave-one-out estimates of the spectrum
+    jn_estimates = list()
+    njn = tf.shape[1]
+    for k in range(njn):
+        i = np.ones([njn], dtype='bool')
+        i[k] = False
+        ps_k = tf[:, i].mean(axis=1)
+        jn_estimates.append(ps_k)
+    jn_estimates = np.array(jn_estimates)
+
+    # estimate the variance of the coherence
+    jn_mean = jn_estimates.mean(axis=0)
+    jn_diff = (jn_estimates - jn_mean)**2
+    ps_var = ((njn-1) / float(njn)) * jn_diff.sum(axis=0)
+
+    # compute the spectrum using all the data
+    ps_mean = ps.mean(axis=1)
+
+    return freq,ps_mean,ps_var
 
 
 def compute_coherence_from_timefreq(tf1, tf2, sample_rate, window_size, gauss_window=False, nstd=6):
