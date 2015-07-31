@@ -520,7 +520,7 @@ def compute_freq_cutoff_and_nmi(freq, sample_rate, coherence_mean, coherence_low
     return freq_cutoff,nminfo
 
 
-def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=None):
+def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_freq=None, return_coherency=False):
     """ Computes the coherence between two signals by averaging across time-frequency representations
         created using a Gaussian-windowed Short-time Fourier Transform. Uses jacknifing to estimate
         the variance of the coherence.
@@ -532,6 +532,7 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     :param increment: The spacing between the points of the STFT  (units=seconds)
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
     :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
+    :param return_coherency: Whether or not to return the complex-valued coherence (default=False)
 
     :return: freq,coherence,coherence_var,phase_coherence,phase_coherence_var: freq is an array of frequencies
              that the coherence was computed at. coherence is an array of length len(freq) that contains the coherence
@@ -589,7 +590,11 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     assert c_amp.min() >= 0.0, "c_amp.min()=%f" % c_amp.min()
     assert np.sum(np.isnan(c_amp)) == 0, "NaNs in c_amp!"
 
-    return freq1,c_amp,c_var_amp,c_phase,c_phase_var
+    if return_coherency:
+        coherency = csd / denom
+        return freq1,c_amp,c_var_amp,c_phase,c_phase_var,coherency
+    else:
+        return freq1,c_amp,c_var_amp,c_phase,c_phase_var
 
 
 def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_freq=None):
