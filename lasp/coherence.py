@@ -533,9 +533,10 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
     :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
 
-    :return: freq,coherence,coherence_var: freq is an array of frequencies that the coherence was computed
-             at. coherence is an array of length len(freq) that contains the coherence at each frequency.
-             c_var is the variance of the coherence.
+    :return: freq,coherence,coherence_var,phase_coherence,phase_coherence_var: freq is an array of frequencies
+             that the coherence was computed at. coherence is an array of length len(freq) that contains the coherence
+             at each frequency. coherence_var is the variance of the coherence. phase_coherence is the average cosine
+             phase difference at each frequency, and phase_coherence_var is the variance of that measure.
     """
 
     t1, freq1, tf1, rms1 = gaussian_stft(s1, sample_rate, window_length=window_length, increment=increment,
@@ -549,32 +550,46 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     ps2 = np.abs(tf2)**2
 
     # make leave-one-out estimates of the complex coherence
-    jn_estimates = list()
+    jn_estimates_amp = list()
+    jn_estimates_phase = list()
     njn = tf1.shape[1]
     for k in range(njn):
         i = np.ones([njn], dtype='bool')
         i[k] = False
         csd = cross_spec12[:, i].sum(axis=1)
         denom = ps1[:, i].sum(axis=1)*ps2[:, i].sum(axis=1)
-        c = np.abs(csd) / np.sqrt(denom)
-        jn_estimates.append(c)
-    jn_estimates = np.array(jn_estimates)
+        c_amp = np.abs(csd) / np.sqrt(denom)
+        jn_estimates_amp.append(c_amp)
+
+        c_phase = np.cos(np.angle(csd))
+        jn_estimates_phase.append(c_phase)
+
+    jn_estimates_amp = np.array(jn_estimates_amp)
+    jn_estimates_phase = np.array(jn_estimates_phase)
 
     # estimate the variance of the coherence
-    jn_mean = jn_estimates.mean(axis=0)
-    jn_diff = (jn_estimates - jn_mean)**2
-    c_var = ((njn-1) / float(njn)) * jn_diff.sum(axis=0)
+    jn_mean_amp = jn_estimates_amp.mean(axis=0)
+    jn_diff_amp = (jn_estimates_amp - jn_mean_amp)**2
+    c_var_amp = ((njn-1) / float(njn)) * jn_diff_amp.sum(axis=0)
+    
+    # estimate the variance of the phase coherence
+    jn_mean_phase = jn_estimates_phase.mean(axis=0)
+    jn_diff_phase = (jn_estimates_phase - jn_mean_phase)**2
+    c_phase_var = ((njn-1) / float(njn)) * jn_diff_phase.sum(axis=0)
 
     # compute the coherence using all the data
     csd = cross_spec12.sum(axis=1)
     denom = ps1.sum(axis=1)*ps2.sum(axis=1)
-    c = np.abs(csd) / np.sqrt(denom)
+    c_amp = np.abs(csd) / np.sqrt(denom)
 
-    assert c.max() <= 1.0, "c.max()=%f" % c.max()
-    assert c.min() >= 0.0, "c.min()=%f" % c.min()
-    assert np.sum(np.isnan(c)) == 0, "NaNs in c!"
+    # compute the phase coherence using all the data
+    c_phase = np.cos(np.angle(csd))
 
-    return freq1,c,c_var
+    assert c_amp.max() <= 1.0, "c_amp.max()=%f" % c_amp.max()
+    assert c_amp.min() >= 0.0, "c_amp.min()=%f" % c_amp.min()
+    assert np.sum(np.isnan(c_amp)) == 0, "NaNs in c_amp!"
+
+    return freq1,c_amp,c_var_amp,c_phase,c_phase_var
 
 
 def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_freq=None):
@@ -595,7 +610,7 @@ def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_
     """
 
     t, freq, tf, rms = gaussian_stft(s, sample_rate, window_length=window_length, increment=increment,
-                                         min_freq=min_freq, max_freq=max_freq)
+                                     min_freq=min_freq, max_freq=max_freq)
     ps = np.abs(tf)**2
 
     # make leave-one-out estimates of the spectrum
