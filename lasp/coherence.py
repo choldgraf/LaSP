@@ -637,7 +637,7 @@ def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_
     ps_mean = ps.mean(axis=1)
 
     # compute the phase
-    z = tf.sum(axis=0)
+    z = tf.sum(axis=1)
     phase = np.angle(z)
 
     return freq,ps_mean,ps_var,phase
