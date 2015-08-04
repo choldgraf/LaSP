@@ -609,9 +609,9 @@ def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
     :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
 
-    :return: freq,coherence,coherence_var: freq is an array of frequencies that the coherence was computed
-             at. coherence is an array of length len(freq) that contains the coherence at each frequency.
-             c_var is the variance of the coherence.
+    :return: freq,psd,psd_var,phase: freq is an array of frequencies that the spectrum was computed
+             at. psd is an array of length len(freq) that contains the power at each frequency.
+             psd_var is the variance of the power spectrum. phase is the phase at each frequency.
     """
 
     t, freq, tf, rms = gaussian_stft(s, sample_rate, window_length=window_length, increment=increment,
@@ -636,7 +636,11 @@ def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_
     # compute the spectrum using all the data
     ps_mean = ps.mean(axis=1)
 
-    return freq,ps_mean,ps_var
+    # compute the phase
+    z = tf.sum(axis=0)
+    phase = np.angle(z)
+
+    return freq,ps_mean,ps_var,phase
 
 
 def compute_coherence_from_timefreq(tf1, tf2, sample_rate, window_size, gauss_window=False, nstd=6):
