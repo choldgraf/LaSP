@@ -65,7 +65,7 @@ class SpikeFFTestCase(TestCase):
         nz = mean_psd2 > 0
         mean_psd2[nz] = 20*np.log10(mean_psd2[nz]) + 100
         mean_psd2[mean_psd2 < 0] = 0
-                
+
         plt.figure()
 
         ax = plt.subplot(2, 1, 1)
