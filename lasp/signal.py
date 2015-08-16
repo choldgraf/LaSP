@@ -811,3 +811,5 @@ def whiten(s, order):
     spred = reg.predict(X)
 
     return sm - np.r_[0, spred], reg.coef_
+
+

@@ -66,7 +66,7 @@ def simulate_poisson(psth, duration, num_trials=20):
             if csum[-1] >= next_spike_time:
                 last_spike_index = k
                 spike_times.append(t)
-        new_spike_trials.append(spike_times)
+        new_spike_trials.append(np.array(spike_times))
     return new_spike_trials
 
 

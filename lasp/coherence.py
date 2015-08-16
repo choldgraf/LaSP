@@ -1,12 +1,12 @@
 import time
+
 import numpy as np
 from scipy import fftpack
-
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
 from scipy.ndimage import convolve1d
-from lasp.signal import gaussian_window
 
+from lasp.signal import gaussian_window
 from lasp.spikes import compute_psth
 from lasp.timefreq import gaussian_stft
 
@@ -595,52 +595,6 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
         return freq1,c_amp,c_var_amp,c_phase,c_phase_var,coherency
     else:
         return freq1,c_amp,c_var_amp,c_phase,c_phase_var
-
-
-def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_freq=None):
-    """ Computes the power spectrum of a signal by averaging across time-frequency representation
-        created using a Gaussian-windowed Short-time Fourier Transform. Uses jacknifing to estimate
-        the variance of the spectra.
-
-    :param s: The first signal
-    :param sample_rate: The sample rates of the signal.
-    :param window_length: The length of the window used to compute the STFT (units=seconds)
-    :param increment: The spacing between the points of the STFT  (units=seconds)
-    :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
-    :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
-
-    :return: freq,psd,psd_var,phase: freq is an array of frequencies that the spectrum was computed
-             at. psd is an array of length len(freq) that contains the power at each frequency.
-             psd_var is the variance of the power spectrum. phase is the phase at each frequency.
-    """
-
-    t, freq, tf, rms = gaussian_stft(s, sample_rate, window_length=window_length, increment=increment,
-                                     min_freq=min_freq, max_freq=max_freq)
-    ps = np.abs(tf)**2
-
-    # make leave-one-out estimates of the spectrum
-    jn_estimates = list()
-    njn = tf.shape[1]
-    for k in range(njn):
-        i = np.ones([njn], dtype='bool')
-        i[k] = False
-        ps_k = tf[:, i].mean(axis=1)
-        jn_estimates.append(ps_k)
-    jn_estimates = np.array(jn_estimates)
-
-    # estimate the variance of the coherence
-    jn_mean = jn_estimates.mean(axis=0)
-    jn_diff = (jn_estimates - jn_mean)**2
-    ps_var = ((njn-1) / float(njn)) * jn_diff.sum(axis=0)
-
-    # compute the spectrum using all the data
-    ps_mean = ps.mean(axis=1)
-
-    # compute the phase
-    z = tf.sum(axis=1)
-    phase = np.angle(z)
-
-    return freq,ps_mean,ps_var,phase
 
 
 def compute_coherence_from_timefreq(tf1, tf2, sample_rate, window_size, gauss_window=False, nstd=6):
