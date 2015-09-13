@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+from numpy.fft import fftshift, ifft
 from scipy import fftpack
 import nitime.algorithms as ntalg
 from nitime import utils as ntutils
@@ -532,12 +533,14 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     :param increment: The spacing between the points of the STFT  (units=seconds)
     :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
     :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
-    :param return_coherency: Whether or not to return the complex-valued coherence (default=False)
+    :param return_coherency: Whether or not to return the time domain coherency (default=False)
 
-    :return: freq,coherence,coherence_var,phase_coherence,phase_coherence_var: freq is an array of frequencies
-             that the coherence was computed at. coherence is an array of length len(freq) that contains the coherence
-             at each frequency. coherence_var is the variance of the coherence. phase_coherence is the average cosine
-             phase difference at each frequency, and phase_coherence_var is the variance of that measure.
+    :return: freq,coherence,coherence_var,phase_coherence,phase_coherence_var,[coherency,coherency_t]: freq is an array
+             of frequencies that the coherence was computed at. coherence is an array of length len(freq) that contains
+             the coherence at each frequency. coherence_var is the variance of the coherence. phase_coherence is the
+             average cosine phase difference at each frequency, and phase_coherence_var is the variance of that measure.
+             coherency is only returned if return_coherency=True, it is the inverse fourier transform of the complex-
+             valued coherency.
     """
 
     t1, freq1, tf1, rms1 = gaussian_stft(s1, sample_rate, window_length=window_length, increment=increment,
@@ -591,8 +594,34 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
     assert np.sum(np.isnan(c_amp)) == 0, "NaNs in c_amp!"
 
     if return_coherency:
-        coherency = csd / denom
-        return freq1,c_amp,c_var_amp,c_phase,c_phase_var,coherency
+        # compute the complex-valued coherency
+        z = csd / denom
+
+        # make the complex-valued coherency symmetric around zero
+        sym_z = np.zeros([len(z)*2 - 1], dtype='complex')
+        sym_z[len(z)-1:] = z
+        sym_z[:len(z)-1] = (z[1:])[::-1]
+
+        # do an fft shift so the inverse fourier transform works
+        sym_z = fftshift(sym_z)
+
+        if len(sym_z) % 2 == 1:
+            # shift zero from end of shift_lags to beginning
+            sym_z = np.roll(sym_z, 1)
+
+        coherency = ifft(sym_z)
+        coherency = fftshift(coherency.real)
+        coherency_t = np.linspace(-1, 1, len(coherency))*window_length
+
+        """
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.plot(coherency_t, coherency, 'k-')
+        plt.axis('tight')
+        plt.show()
+        """
+
+        return freq1,c_amp,c_var_amp,c_phase,c_phase_var,coherency,coherency_t
     else:
         return freq1,c_amp,c_var_amp,c_phase,c_phase_var
 

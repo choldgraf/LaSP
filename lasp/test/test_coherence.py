@@ -6,9 +6,12 @@ from numpy.fft import fftfreq, fftshift
 from scipy.fftpack import fft
 from scipy.ndimage import convolve1d
 from scipy.signal import welch
+
+from lasp.signal import correlation_function, bandpass_filter, coherency
 from lasp.coherence import coherence_jn
+
 from lasp.plots import custom_legend
-from lasp.signal import correlation_function, coherency, lowpass_filter, bandpass_filter
+
 
 
 class CoherenceTestCase(TestCase):
@@ -105,7 +108,10 @@ class CoherenceTestCase(TestCase):
         psd12_welch /= psd12_welch.max()
 
         # compute the coherence from the cross spectral density
-        cfreq,coherence,coherence_var = coherence_jn(s1, s2, sample_rate=sr, window_length=0.050, increment=0.050)
+        cfreq,coherence,coherence_var,phase_coherence,phase_coherence_var,coh12_freqspace,coh12_freqspace_t = \
+            coherence_jn(s1, s2, sample_rate=sr, window_length=0.100, increment=0.050, return_coherency=True)
+
+        coh12_freqspace /= np.abs(coh12_freqspace).max()
 
         # weight the coherence by one minus the normalized standard deviation
         coherence_std = np.sqrt(coherence_var)
@@ -174,11 +180,14 @@ class CoherenceTestCase(TestCase):
         plt.plot(lags, acf1, 'k-', linewidth=2.0)
         plt.plot(lags, acf2, 'r-', alpha=0.75, linewidth=2.0)
         plt.plot(lags, cf12, 'g-', alpha=0.75, linewidth=2.0)
-        plt.plot(lags, coh12, 'b-', linewidth=2.0)
+        plt.plot(lags, coh12, 'b-', linewidth=2.0, alpha=0.75)
+        plt.plot(coh12_freqspace_t*1e3, coh12_freqspace, 'c-', linewidth=3.0, alpha=0.75)
         plt.xlabel('Lag (ms)')
         plt.ylabel('Correlation Function')
         plt.axis('tight')
         plt.ylim(-0.5, 1.0)
+        handles = custom_legend(['k', 'r', 'g', 'b', 'c'], ['acf1', 'acf2', 'cf12', 'coh12', 'coh12_f'])
+        plt.legend(handles=handles)
 
         # plot the cross spectral density
         ax = plt.subplot(nrows, ncols, 4)
