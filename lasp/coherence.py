@@ -611,7 +611,10 @@ def coherence_jn(s1, s2, sample_rate, window_length, increment, min_freq=0, max_
 
         coherency = ifft(sym_z)
         coherency = fftshift(coherency.real)
-        coherency_t = np.linspace(-1, 1, len(coherency))*window_length
+
+        dt = 1. / sample_rate
+        hc = (len(coherency) - 1) / 2
+        coherency_t = np.arange(-hc, hc+1, 1)*dt
 
         """
         import matplotlib.pyplot as plt

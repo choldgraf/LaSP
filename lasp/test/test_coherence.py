@@ -181,7 +181,7 @@ class CoherenceTestCase(TestCase):
         plt.plot(lags, acf2, 'r-', alpha=0.75, linewidth=2.0)
         plt.plot(lags, cf12, 'g-', alpha=0.75, linewidth=2.0)
         plt.plot(lags, coh12, 'b-', linewidth=2.0, alpha=0.75)
-        plt.plot(coh12_freqspace_t*1e3, coh12_freqspace, 'c-', linewidth=3.0, alpha=0.75)
+        plt.plot(coh12_freqspace_t*1e3, coh12_freqspace, 'm-', linewidth=1.0, alpha=0.95)
         plt.xlabel('Lag (ms)')
         plt.ylabel('Correlation Function')
         plt.axis('tight')
@@ -200,5 +200,19 @@ class CoherenceTestCase(TestCase):
         plt.xlabel('Frequency (Hz)')
         plt.ylabel('Cross-spectral Density/Coherence')
         plt.legend(handles=handles)
+
+        """
+        plt.figure()
+        plt.axhline(0, c='k')
+        plt.plot(lags, cf12, 'k-', alpha=1, linewidth=2.0)
+        plt.plot(lags, coh12, 'b-', linewidth=3.0, alpha=0.75)
+        plt.plot(coh12_freqspace_t*1e3, coh12_freqspace, 'r-', linewidth=2.0, alpha=0.95)
+        plt.xlabel('Lag (ms)')
+        plt.ylabel('Correlation Function')
+        plt.axis('tight')
+        plt.ylim(-0.5, 1.0)
+        handles = custom_legend(['k', 'b', 'r'], ['cf12', 'coh12', 'coh12_f'])
+        plt.legend(handles=handles)
+        """
 
         plt.show()
