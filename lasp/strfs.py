@@ -188,13 +188,19 @@ def fit_strf_lasso(input, output, lags, lambda1=1.0, lambda2=1.0, num_threads=-1
     return strf,bias
 
 
-def fit_strf_ridge(input, output, lags, alpha=1.0):
+def fit_strf_ridge(input, output, lags, alpha=1.0, verbose=False):
 
     #convert the input into a toeplitz-like matrix
+    if verbose:
+        nt,nf = input.shape
+        nelems = nt*nf*len(lags)
+        mem = (nelems*8.) / 1024.**2
+        print '[fit_strf_ridge] estimated size of toeplitz matrix: %d MB' % mem
     stime = time.time()
     A = make_toeplitz(input, lags, include_bias=False)
     etime = time.time() - stime
-    print '[fit_strf_ridge] Time to make Toeplitz matrix: %d seconds' % etime
+    if verbose:
+        print '[fit_strf_ridge] Time to make Toeplitz matrix: %d seconds' % etime
 
     #fit the STRF
     stime = time.time()
@@ -203,7 +209,8 @@ def fit_strf_ridge(input, output, lags, alpha=1.0):
     rr = Ridge(alpha=alpha, fit_intercept=True)
     rr.fit(A, output)
     etime = time.time() - stime
-    print '[fit_strf_ridge] Time to fit STRF: %d seconds' % etime
+    if verbose:
+        print '[fit_strf_ridge] Time to fit STRF: %d seconds' % etime
 
     #reshape the STRF so that it makes sense
     nt = input.shape[0]
