@@ -321,6 +321,21 @@ def mt_stft(s, sample_rate, window_length, increment, bandwidth=None, min_freq=0
 
 def wavelet_scalogram(s, sample_rate, increment, frequencies=None, min_freq=1, max_freq=512, num_cycles_per_window=10,
                       num_freqs=20, nstd=6):
+    """ Create a time frequency representation of the signal s by constructing a wavelet scalogram. Morelet wavelets
+        are used.
+
+    :param s: The signal, a 1D array.
+    :param sample_rate: The sample rate of the signal in Hz.
+    :param increment: The spacing in seconds between points where the windowed wavelet convolution is taken.
+    :param frequencies: The center frequencies of each wavelet.
+    :param min_freq: If frequencies is not specified, then the minimum center frequency to analyze.
+    :param max_freq: If frequencies is not specified, then the maximum center frequency to analyze.
+    :param num_cycles_per_window: The number of cycles for a given wavelet in a window.
+    :param num_freqs: If frequencies is not specified, then the number of center frequencies between min_freq and max_freq.
+    :param nstd: The number of standard deviations to consider for the Gaussian window when keeping the number of cycles constant.
+
+    :return: (t, freq, tf) - t is a vector of time points, freq is an array of frequencies, tf is the time-frequency scalogram.
+    """
     est = WaveletSpectrumEstimator(frequencies=frequencies, num_cycles_per_window=num_cycles_per_window,
                                    min_freq=min_freq, max_freq=max_freq, num_freqs=num_freqs, nstd=nstd)
     return timefreq(s, sample_rate, None, increment, spectrum_estimator=est, min_freq=min_freq, max_freq=max_freq)
@@ -651,3 +666,47 @@ def roll_and_subtract(sig, amt=1, axis=1, hwr=False):
     return diff
 
 
+def power_spectrum_jn(s, sample_rate, window_length, increment, min_freq=0, max_freq=None):
+    """ Computes the power spectrum of a signal by averaging across time-frequency representation
+        created using a Gaussian-windowed Short-time Fourier Transform. Uses jacknifing to estimate
+        the variance of the spectra.
+
+    :param s: The first signal
+    :param sample_rate: The sample rates of the signal.
+    :param window_length: The length of the window used to compute the STFT (units=seconds)
+    :param increment: The spacing between the points of the STFT  (units=seconds)
+    :param min_freq: The minimum frequency to analyze (units=Hz, default=0)
+    :param max_freq: The maximum frequency to analyze (units=Hz, default=nyquist frequency)
+
+    :return: freq,psd,psd_var,phase: freq is an array of frequencies that the spectrum was computed
+             at. psd is an array of length len(freq) that contains the power at each frequency.
+             psd_var is the variance of the power spectrum. phase is the phase at each frequency.
+    """
+
+    t, freq, tf, rms = gaussian_stft(s, sample_rate, window_length=window_length, increment=increment,
+                                     min_freq=min_freq, max_freq=max_freq)
+    ps = np.abs(tf)**2
+
+    # make leave-one-out estimates of the spectrum
+    jn_estimates = list()
+    njn = tf.shape[1]
+    for k in range(njn):
+        i = np.ones([njn], dtype='bool')
+        i[k] = False
+        ps_k = tf[:, i].mean(axis=1)
+        jn_estimates.append(ps_k)
+    jn_estimates = np.array(jn_estimates)
+
+    # estimate the variance of the coherence
+    jn_mean = jn_estimates.mean(axis=0)
+    jn_diff = (jn_estimates - jn_mean)**2
+    ps_var = ((njn-1) / float(njn)) * jn_diff.sum(axis=0)
+
+    # compute the spectrum using all the data
+    ps_mean = ps.mean(axis=1)
+
+    # compute the phase
+    z = tf.sum(axis=1)
+    phase = np.angle(z)
+
+    return freq,ps_mean,ps_var,phase

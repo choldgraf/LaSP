@@ -1,7 +1,7 @@
 import copy
 import fnmatch
 from math import ceil
-from numpy.fft import fftshift
+from numpy.fft import fftshift, ifftshift
 import os
 import subprocess
 import wave
@@ -12,11 +12,10 @@ import h5py
 
 import numpy as np
 from scipy.io.wavfile import read as read_wavfile
-from scipy.fftpack import fft,fftfreq,fft2,dct
+from scipy.fftpack import fft,ifft,fftfreq,fft2,ifft2,dct
 from scipy.signal import resample, firwin, filtfilt
 from scipy.optimize import leastsq
 import scikits.talkbox as talkbox
-from spectrum import xcorr
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmap
@@ -24,11 +23,9 @@ import matplotlib.colors as pltcolors
 import matplotlib.mlab as mlab
 
 import colorsys
-from lasp.signal import lowpass_filter, gaussian_window
+from lasp.signal import lowpass_filter, gaussian_window, correlation_function
 from lasp.timefreq import gaussian_stft
 from lasp.detect_peaks import *
-#from lasp.signal import lowpass_filter
-#from lasp.timefreq import gaussian_stft
 
 
 class WavFile():
@@ -65,7 +62,7 @@ class WavFile():
         wf.writeframes(''.join(hex_sound))
         wf.close()
 
-    def analyze(self, min_freq=0, max_freq=10000.0, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True):
+    def analyze(self, min_freq=0, max_freq=None, spec_sample_rate=1000.0, freq_spacing=125.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True, cmplx=False):
         if self.analyzed:
             return
 
@@ -77,7 +74,10 @@ class WavFile():
         #compute log power spectrum
         fftx = fft(self.data)
         ps_f = fftfreq(len(self.data), d=(1.0 / self.sample_rate))
-        findx = (ps_f > min_freq) & (ps_f < max_freq)
+        if max_freq == None:
+            findx = (ps_f > min_freq) & (ps_f < np.inf)
+        else:
+            findx = (ps_f > min_freq) & (ps_f < max_freq)
         self.power_spectrum = np.log10(np.abs(fftx[findx]))
         self.power_spectrum_f = ps_f[findx]
 
@@ -93,12 +93,16 @@ class WavFile():
         #compute log spectrogram
         t,f,spec,spec_rms = spectrogram(self.data, self.sample_rate, spec_sample_rate=spec_sample_rate,
                                         freq_spacing=freq_spacing, min_freq=min_freq, max_freq=max_freq,
-                                        log=self.log_spectrogram, noise_level_db=noise_level_db, rectify=rectify)
+                                        log=self.log_spectrogram, noise_level_db=noise_level_db, rectify=rectify, cmplx=cmplx)
         self.spectrogram_t = t
         self.spectrogram_f = f
         self.spectrogram = spec
         self.spectrogram_rms = spec_rms
         self.analyzed = True
+
+    def reanalyze(self, min_freq=0, max_freq=None, spec_sample_rate=1000.0, freq_spacing=25.0, envelope_cutoff_freq=200.0, noise_level_db=80, rectify=True, cmplx=False):
+        self.analyzed = False
+        return self.analyze(min_freq, max_freq, spec_sample_rate, freq_spacing, envelope_cutoff_freq, noise_level_db, rectify, cmplx)
 
     def plot(self, fig=None, show_envelope=True, min_freq=0.0, max_freq=10000.0, colormap=cmap.gist_yarg, noise_level_db=80):
 
@@ -231,7 +235,7 @@ class BioSound():
         spectdata = spectdata/np.sum(spectdata)
         meanspect = np.sum(freqdata*spectdata)
         stdspect = np.sqrt(np.sum(spectdata*((freqdata-meanspect)**2)))
-        skewspect = np.sum(spectdata*(freqdata-meanspect)**3);
+        skewspect = np.sum(spectdata*(freqdata-meanspect)**3)
         skewspect = skewspect/(stdspect**3)
         kurtosisspect = np.sum(spectdata*(freqdata-meanspect)**4)
         kurtosisspect = kurtosisspect/(stdspect**4)
@@ -334,7 +338,7 @@ class BioSound():
         # plt.xlabel('Time (ms)')
         plt.xlim(0, t[-1])               
         # Plot the amplitude enveloppe        
-        plt.plot(self.tAmp*1000.0, self.amp, 'r', linewidth=2);
+        plt.plot(self.tAmp*1000.0, self.amp, 'r', linewidth=2)
       
         # Plot the spectrogram
         plt.axes([0.1, 0.1, 0.85, 0.6])
@@ -344,7 +348,7 @@ class BioSound():
         soundSpect = self.spectro
         maxB = soundSpect.max()
         minB = maxB-DBNOISE
-        soundSpect[soundSpect < minB] = minB;
+        soundSpect[soundSpect < minB] = minB
         plt.imshow(np.transpose(soundSpect), extent = (self.to[0]*1000, self.to[-1]*1000, self.fo[0], self.fo[-1]), aspect='auto', interpolation='nearest', origin='lower', cmap=cmap, vmin=minB, vmax=maxB)
         plt.ylim(f_low, f_high)
         plt.xlim(0, t[-1])
@@ -368,8 +372,8 @@ class BioSound():
         plt.ylabel('Power Linear')
         
         xl, xh, yl, yh = plt.axis()
-        xl = 0.0;
-        xh = f_high;
+        xl = 0.0
+        xh = f_high
         plt.axis((xl, xh, yl, yh))
         plt.plot([self.q1, self.q1], [yl, yh], 'k--')
         plt.plot([self.q2, self.q2], [yl, yh], 'k--')
@@ -424,22 +428,22 @@ def spec_colormap():
 # Makes the colormap that we like for spectrograms
 
     cmap = np.zeros((64,3))
-    cmap[0,2] = 1.0;
+    cmap[0,2] = 1.0
 
     for ib in range(21):
-        cmap[ib+1,0] = (31.0+ib*(12.0/20.0))/60.0;
-        cmap[ib+1,1] = (ib+1.0)/21.0;
-        cmap[ib+1,2] = 1.0;
+        cmap[ib+1,0] = (31.0+ib*(12.0/20.0))/60.0
+        cmap[ib+1,1] = (ib+1.0)/21.0
+        cmap[ib+1,2] = 1.0
 
     for ig in range(21):
-        cmap[ig+ib+1,0] = (21.0-(ig)*(12.0/20.0))/60.0;
-        cmap[ig+ib+1,1] = 1.0;
-        cmap[ig+ib+1,2] = 0.5+(ig)*(0.3/20.0);
+        cmap[ig+ib+1,0] = (21.0-(ig)*(12.0/20.0))/60.0
+        cmap[ig+ib+1,1] = 1.0
+        cmap[ig+ib+1,2] = 0.5+(ig)*(0.3/20.0)
 
     for ir in range(21):
-        cmap[ir+ig+ib+1,0] = (8.0-(ir)*(7.0/20.0))/60.0;
-        cmap[ir+ig+ib+1,1] = 0.5 + (ir)*(0.5/20.0);
-        cmap[ir+ig+ib+1,2] = 1;
+        cmap[ir+ig+ib+1,0] = (8.0-(ir)*(7.0/20.0))/60.0
+        cmap[ir+ig+ib+1,1] = 0.5 + (ir)*(0.5/20.0)
+        cmap[ir+ig+ib+1,2] = 1
 
     for ic in range(64):
         (cmap[ic,0], cmap[ic,1], cmap[ic,2]) = colorsys.hsv_to_rgb(cmap[ic,0], cmap[ic,1], cmap[ic,2])
@@ -521,7 +525,7 @@ def play_sound_array(data, sample_rate):
     p.terminate()
 
 
-def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True):
+def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True, cmplx = True):
     """
         Given a sound pressure waveform, compute the log spectrogram. See documentation on gaussian_stft for arguments and return values.
 
@@ -532,6 +536,9 @@ def spectrogram(s, sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_
     increment = 1.0 / spec_sample_rate
     window_length = nstd / (2.0*np.pi*freq_spacing)
     t,freq,timefreq,rms = gaussian_stft(s, sample_rate, window_length, increment, nstd=nstd, min_freq=min_freq, max_freq=max_freq)
+
+    if cmplx:
+        return t, freq, timefreq, rms
 
     if log:
         #create log spectrogram (power in decibels)
@@ -562,6 +569,7 @@ def temporal_envelope(s, sample_rate, cutoff_freq=200.0, resample_rate=None):
     #low pass filter
     if cutoff_freq is not None:
         srect = lowpass_filter(srect, sample_rate, cutoff_freq, filter_order=4)
+        srect[srect < 0] = 0
         
     if resample_rate is not None:
         lensound = len(srect)
@@ -719,7 +727,7 @@ def synSpect(b, x):
 # global fundGlobal maxFund minFund
 
     npeaks = np.size(b)-1  # First element of b is the sampling rate
-# amp = 25;      # Force 25 dB peaks
+# amp = 25      # Force 25 dB peaks
     sdpk = 60    # Force 80 hz width
 
     synS = np.zeros(len(x))
@@ -731,7 +739,7 @@ def synSpect(b, x):
     
     #if (sum(isinf(synS)) + sum(isnan(synS))):
     #    for i in range(npeaks):
-    #        fprintf(1,'%f ', exp(b(i+1)));    
+    #        fprintf(1,'%f ', exp(b(i+1)))    
     return synS
 
     
@@ -743,57 +751,66 @@ def residualSyn(vars, x, realS):
     
     #if (sum(isinf(synS)) + sum(isnan(synS)))
     #    for i=1:npeaks
-    #        fprintf(1,'%f ', exp(b(i+1)));   
+    #        fprintf(1,'%f ', exp(b(i+1)))   
 
 
-def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, lowFc = 200, highFc = 6000, minSaliency = 0.5):
-    
-# Estimates the fundamental frequency of a complex sound.
-# soundIn is the sound pressure waveformlog spectrogram.
-# fs is the sampling rate
-# t is a vector of time values in s at which the fundamental will be estimated.
-# The sound must include at least 1024 sample points
+def fundEstimator(soundIn, fs, t=None, debugFig = 0, maxFund = 1500, minFund = 300, lowFc = 200, highFc = 6000, minSaliency = 0.5):
+    """
+    Estimates the fundamental frequency of a complex sound.
+    soundIn is the sound pressure waveformlog spectrogram.
+    fs is the sampling rate
+    t is a vector of time values in s at which the fundamental will be estimated.
+    The sound must include at least 1024 sample points
 
-# The optional parameter with defaults are
-# Some user parameters (should be part of the function at some time)
-#    debugFig = 0         Set to zero to eliminate figures.
-#    maxFund = 1500       Maximum fundamental frequency
-#    minFund = 300        Minimum fundamental frequency
-#    lowFc = 200          Low frequency cut-off for band-passing the signal prior to auto-correlation.
-#    highFc = 6000        High frequency cut-off
-#    minSaliency = 0.5    Threshold in the auto-correlation for minimum saliency - returns NaN for pitch values is saliency is below this number
-    
-# Returns    
-#        sal     - the time varying pitch saliency - a number between 0 and 1 corresponding to relative size of the first auto-correlation peak
-#        fund     - the time-varying fundamental in Hz at the same resolution as the spectrogram.
-#        fund2   - a second peak in the spectrum - not a multiple of the fundamental a sign of a second voice
-#        form1   - the first formant, if it exists
-#        form2   - the second formant, if it exists
-#        form3   - the third formant, if it exists
-#        soundLen - length of sal, fund, fund2, form1, form2, form3
+    The optional parameter with defaults are
+    Some user parameters (should be part of the function at some time)
+       debugFig = 0         Set to zero to eliminate figures.
+       maxFund = 1500       Maximum fundamental frequency
+       minFund = 300        Minimum fundamental frequency
+       lowFc = 200          Low frequency cut-off for band-passing the signal prior to auto-correlation.
+       highFc = 6000        High frequency cut-off
+       minSaliency = 0.5    Threshold in the auto-correlation for minimum saliency - returns NaN for pitch values is saliency is below this number
 
+    Returns
+           sal     - the time varying pitch saliency - a number between 0 and 1 corresponding to relative size of the first auto-correlation peak
+           fund     - the time-varying fundamental in Hz at the same resolution as the spectrogram.
+           fund2   - a second peak in the spectrum - not a multiple of the fundamental a sign of a second voice
+           form1   - the first formant, if it exists
+           form2   - the second formant, if it exists
+           form3   - the third formant, if it exists
+           soundLen - length of sal, fund, fund2, form1, form2, form3
+    """
 
-
-# Band-pass filtering signal prior to auto-correlation
+    # Band-pass filtering signal prior to auto-correlation
     soundLen = len(soundIn)
     nfilt = 1024
     if soundLen < 1024:
-        print 'Error in fundEstimator: sound too short for bandpass filtering\n'
+        print 'Error in fundEstimator: sound too short for bandpass filtering, len(soundIn)=%d\n' % soundLen
         return (0, 0, 0, 0, 0, 0, 0)
 
+    # high pass filter the signal
     highpassFilter = firwin(nfilt-1, 2*lowFc/fs, pass_zero=False)
-    soundIn = filtfilt(highpassFilter, [1.0], soundIn)
+    padlen = min(soundLen-10, 3*len(highpassFilter))
+    soundIn = filtfilt(highpassFilter, [1.0], soundIn, padlen=padlen)
+
+    # low pass filter the signal
     lowpassFilter = firwin(nfilt, 2*highFc/fs)
-    soundIn = filtfilt(lowpassFilter, [1.0], soundIn)
+    padlen = min(soundLen-10, 3*len(lowpassFilter))
+    soundIn = filtfilt(lowpassFilter, [1.0], soundIn, padlen=padlen)
 
     # Plot a spectrogram?
     if debugFig:
         plt.figure(9)
         (tDebug ,freqDebug ,specDebug , rms) = spectrogram(soundIn, fs, 1000.0, 50, min_freq=0, max_freq=10000, nstd=6, log=True, noise_level_db=50, rectify=True) 
         plot_spectrogram(tDebug, freqDebug, specDebug)
-    
 
-# Initializations and useful variables
+    # Initializations and useful variables
+    if t is None:
+        # initialize t to be spaced by 500us increments
+        sound_dur = len(soundIn) / fs
+        _si = 1e-3
+        npts = int(sound_dur / _si)
+        t = np.arange(npts) * _si
 
     nt=len(t)
     soundRMS = np.zeros(nt)
@@ -804,7 +821,7 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
     form2 = np.zeros(nt)
     form3 = np.zeros(nt)
 
-#  Calculate the size of the window for the auto-correlation
+    #  Calculate the size of the window for the auto-correlation
     alpha = 5                          # Number of sd in the Gaussian window
     winLen = int(np.fix((2.0*alpha/minFund)*fs))  # Length of Gaussian window based on minFund
     if (winLen%2 == 0):  # Make a symmetric window
@@ -816,7 +833,7 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
     gt2, w2 = gaussian_window(winLen2, alpha)
     maxlags = int(2*ceil((float(fs)/minFund)))
 
-# First calculate the rms in each window
+    # First calculate the rms in each window
     for it in range(nt):
         tval = t[it]               # Center of window in time
         tind = int(np.fix(tval*fs))    # Center of window in ind
@@ -836,16 +853,16 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
             windend = winLen-1
             
         soundWin = soundIn[tstart:tend]*w[winstart:windend]
-        soundRMS[it] = np.std(soundWin);
+        soundRMS[it] = np.std(soundWin)
     
-    soundRMSMax = max(soundRMS);
+    soundRMSMax = max(soundRMS)
 
-# Calculate the auto-correlation in windowed segments and obtain 4 guess values of the fundamental
-# fundCorrGuess - guess from the auto-correlation function
-# fundCorrAmpGuess - guess form the amplitude of the auto-correlation function
-# fundCepGuess - guess from the cepstrum
-# fundStackGuess - guess taken from a fit of the power spectrum with a harmonic stack, using the fundCepGuess as a starting point
-#  Current version use fundStackGuess as the best estimate...
+    # Calculate the auto-correlation in windowed segments and obtain 4 guess values of the fundamental
+    # fundCorrGuess - guess from the auto-correlation function
+    # fundCorrAmpGuess - guess form the amplitude of the auto-correlation function
+    # fundCepGuess - guess from the cepstrum
+    # fundStackGuess - guess taken from a fit of the power spectrum with a harmonic stack, using the fundCepGuess as a starting point
+    #  Current version use fundStackGuess as the best estimate...
 
     soundlen = 0
     for it in range(nt):
@@ -857,9 +874,9 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
         form3[it] = float('nan')
         
         if (soundRMS[it] < soundRMSMax*0.1):
-            continue;
+            continue
     
-        soundlen += 1;
+        soundlen += 1
         tval = t[it]               # Center of window in time
         tind = int(np.fix(tval*fs))    # Center of window in ind
         tstart = tind - (winLen-1)/2
@@ -896,19 +913,18 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
               
         soundWin2 = soundIn[tstart2:tend2]*w2[winstart2:windend2]
         
-    # Apply LPC to get time-varying formants and one additional guess for the fundamental frequency
-
+        # Apply LPC to get time-varying formants and one additional guess for the fundamental frequency
         A, E, K = talkbox.lpc(soundWin2, 8)    # 8 degree polynomial
         rts = np.roots(A)          # Find the roots of A
         rts = rts[np.imag(rts)>=0]  # Keep only half of them
-        angz = np.arctan2(np.imag(rts),np.real(rts));
+        angz = np.arctan2(np.imag(rts),np.real(rts))
     
-    # Calculate the frequencies and the bandwidth of the formants
+        # Calculate the frequencies and the bandwidth of the formants
         frqsFormants = angz*(fs/(2*np.pi))
         indices = np.argsort(frqsFormants)
         bw = -1/2*(fs/(2*np.pi))*np.log(np.abs(rts))
     
-    # Keep formants above 1000 Hz and with bandwidth < 1000
+        # Keep formants above 1000 Hz and with bandwidth < 1000
         formants = []
         for kk in indices:
             if ( frqsFormants[kk]>1000 and bw[kk] < 1000):        
@@ -922,9 +938,9 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
         if len(formants) > 2 : 
             form3[it] = formants[2]
 
-    
-        # Calculate the auto-correlation using xcorr from spectrum
-        autoCorr, lags = xcorr(soundWin, soundWin, maxlags=maxlags, norm='unbiased')
+        # Calculate the auto-correlation
+        lags = np.arange(-maxlags, maxlags+1, 1)
+        autoCorr = correlation_function(soundWin, soundWin, lags)
         ind0 = int(mlab.find(lags == 0))  # need to find lag zero index
     
         # find peaks
@@ -943,47 +959,43 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
             fundCorrGuess = fs/abs(lags[indMax])
             pitchSaliency = autoCorr[indMax]/autoCorr[ind0]
 
-
         sal[it] = pitchSaliency
     
         if sal[it] < minSaliency:
             continue
 
-    
-    # Calculate the envelope of the auto-correlation after rectification
+        # Calculate the envelope of the auto-correlation after rectification
         envCorr = temporal_envelope(autoCorr, fs, cutoff_freq=maxFund, resample_rate=None) 
         locsEnvCorr = detect_peaks(envCorr, mph=max(envCorr)/10)
         pksEnvCorr = envCorr[locsEnvCorr]
     
-    # The max peak should be around zero
+        # The max peak should be around zero
         indIndEnvMax = mlab.find(pksEnvCorr == max(pksEnvCorr))
           
-    # Take the first peak not in the middle
+        # Take the first peak not in the middle
         if indIndEnvMax+2 > len(locsEnvCorr):
             fundCorrAmpGuess = fundCorrGuess
             indEnvMax = indMax
         else:
             indEnvMax = locsEnvCorr[indIndEnvMax+1]
             fundCorrAmpGuess = fs/lags[indEnvMax]
-    
-        
-    
-    # Calculate power spectrum and cepstrum
+
+        # Calculate power spectrum and cepstrum
         Y = fft(soundWin, n=winLen+1)
         f = (fs/2.0)*(np.array(range((winLen+1)/2+1), dtype=float)/float((winLen+1)/2))
         fhigh = mlab.find(f >= highFc)[0]
     
         powSound = 20.0*np.log10(np.abs(Y[0:(winLen+1)/2+1]))    # This is the power spectrum
         powSoundGood = powSound[0:fhigh]
-        maxPow = max(powSoundGood);
+        maxPow = max(powSoundGood)
         powSoundGood = powSoundGood - maxPow   # Set zero as the peak amplitude
-        powSoundGood[powSoundGood < - 60] = -60;    
+        powSoundGood[powSoundGood < - 60] = -60    
     
-    # Calculate coarse spectral enveloppe
+        # Calculate coarse spectral enveloppe
         p = np.polyfit(f[0:fhigh], powSoundGood, 3)
         powAmp = np.polyval(p, f[0:fhigh]) 
     
-    # Cepstrum
+        # Cepstrum
         CY = dct(powSoundGood-powAmp, norm = 'ortho')            
     
         tCY = 2000.0*np.array(range(len(CY)))/fs          # Units of Cepstrum in ms
@@ -991,7 +1003,7 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
         flowCY = mlab.find(fCY < lowFc)[0]
         fhighCY = mlab.find(fCY < highFc)[0]
     
-    # Find peak of Cepstrum
+        # Find peak of Cepstrum
         indPk = mlab.find(CY[fhighCY:flowCY] == max(CY[fhighCY:flowCY]))[-1]
         indPk = fhighCY + indPk 
         fmass = 0
@@ -1011,9 +1023,8 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
                 mass = mass + CY[indTry]
                 indTry = indTry - 1
                 if indTry < 0:
-                    break;
-            
-        
+                    break
+
         fGuess = fmass/mass
     
         if (fGuess == 0  or np.isnan(fGuess) or np.isinf(fGuess) ):              # Failure of cepstral method
@@ -1021,7 +1032,7 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
 
         fundCepGuess = fGuess
     
-    # Force fundamendal to be bounded
+        # Force fundamendal to be bounded
         if (fundCepGuess > maxFund ):
             i = 2
             while(fundCepGuess > maxFund):
@@ -1030,17 +1041,16 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
         elif (fundCepGuess < minFund):
             i = 2
             while(fundCepGuess < minFund):
-                fundCepGuess = fGuess*i;
+                fundCepGuess = fGuess*i
                 i += 1
     
-    # Fit Gaussian harmonic stack
+        # Fit Gaussian harmonic stack
         maxPow = max(powSoundGood-powAmp)
-   
 
-    # This is the matlab code...
-    # fundFitCep = NonLinearModel.fit(f(1:fhigh)', powSoundGood'-powAmp, @synSpect, [fundCepGuess ones(1,9).*log(maxPow)]); 
-    # modelPowCep = synSpect(double(fundFitCep.Coefficients(:,1)), f(1:fhigh));  
-    
+        # This is the matlab code...
+        # fundFitCep = NonLinearModel.fit(f(1:fhigh)', powSoundGood'-powAmp, @synSpect, [fundCepGuess ones(1,9).*log(maxPow)])
+        # modelPowCep = synSpect(double(fundFitCep.Coefficients(:,1)), f(1:fhigh))
+
         vars = np.concatenate(([fundCepGuess], np.ones(9)*np.log(maxPow)))
         bout = leastsq(residualSyn, vars, args = (f[0:fhigh], powSoundGood-powAmp)) 
         modelPowCep = synSpect(bout[0], f[0:fhigh])
@@ -1060,8 +1070,8 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
             fundStackGuess = float('nan')
 
     
-    # A second cepstrum for the second voice
-    #     CY2 = dct(powSoundGood-powAmp'- modelPowCep);  
+        # A second cepstrum for the second voice
+        #     CY2 = dct(powSoundGood-powAmp'- modelPowCep)
                 
         fund[it] = fundStackGuess        
     
@@ -1075,40 +1085,37 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
                     if (pitchSaliency > minSaliency):
                         fund2[it] = f2
 
-               
-    
-#%     modelPowCorrAmp = synSpect(double(fundFitCorrAmp.Coefficients(:,1)), f(1:fhigh));
+#%     modelPowCorrAmp = synSpect(double(fundFitCorrAmp.Coefficients(:,1)), f(1:fhigh))
 #%     
-#%     errCorr = sum((powSoundGood - powAmp' - modelPowCorr).^2);
-#%     errCorrAmp = sum((powSoundGood - powAmp' - modelPowCorrAmp).^2);
-#%     errCorrSum = sum((powSoundGood - powAmp' - (modelPowCorr+modelPowCorrAmp) ).^2);
+#%     errCorr = sum((powSoundGood - powAmp' - modelPowCorr).^2)
+#%     errCorrAmp = sum((powSoundGood - powAmp' - modelPowCorrAmp).^2)
+#%     errCorrSum = sum((powSoundGood - powAmp' - (modelPowCorr+modelPowCorrAmp) ).^2)
 #%       
-#%     f1 = double(fundFitCorr.Coefficients(1,1));
-#%     f2 = double(fundFitCorrAmp.Coefficients(1,1));
+#%     f1 = double(fundFitCorr.Coefficients(1,1))
+#%     f2 = double(fundFitCorrAmp.Coefficients(1,1))
 #%     
 #%     if (pitchSaliency > minSaliency)
 #%         if (errCorr < errCorrAmp)
-#%             fund(it) = f1;
+#%             fund(it) = f1
 #%             if errCorrSum < errCorr
-#%                 fund2(it) = f2;
+#%                 fund2(it) = f2
 #%             end
 #%         else
-#%             fund(it) = f2;
+#%             fund(it) = f2
 #%             if errCorrSum < errCorrAmp
-#%                 fund2(it) = f1;
+#%                 fund2(it) = f1
 #%             end
 #%         end
 #%         
 #%     end
-    
-       
+
         if (debugFig ):
             plt.figure(10)
             plt.subplot(4,1,1)
             plt.cla()
             plt.plot(soundWin)
-#         f1 = double(fundFitCorr.Coefficients(1,1));
-#         f2 = double(fundFitCorrAmp.Coefficients(1,1));
+#         f1 = double(fundFitCorr.Coefficients(1,1))
+#         f2 = double(fundFitCorrAmp.Coefficients(1,1))
             titleStr = 'Saliency = %.2f Pitch AC = %.2f (Hz)  Pitch ACA = %.2f Pitch C %.2f (Hz)' % (pitchSaliency, fundCorrGuess, fundCorrAmpGuess, fundStackGuess)
             plt.title(titleStr)
         
@@ -1126,33 +1133,32 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
             plt.axis([0, highFc, -60, 0])
             plt.plot(f[0:fhigh], powAmp, 'b--')
             plt.plot(f[0:fhigh], modelPowCep + powAmp, 'k')
-            # plt.plot(f(1:fhigh), modelPowCorrAmp + powAmp', 'g');
+            # plt.plot(f(1:fhigh), modelPowCorrAmp + powAmp', 'g')
         
             for ih in range(1,6):
                 plt.plot([fundCorrGuess*ih, fundCorrGuess*ih], [-60, 0], 'r')
                 plt.plot([fundStackGuess*ih, fundStackGuess*ih], [-60, 0], 'k')
 
-        
             if f2 != 0: 
                 plt.plot([f2, f2], [-60, 0], 'g')
 
-            plt.xlabel('Frequency (Hz)');
-        # title(sprintf('Err1 = %.1f Err2 = %.1f', errCorr, errCorrAmp));
+            plt.xlabel('Frequency (Hz)')
+            # title(sprintf('Err1 = %.1f Err2 = %.1f', errCorr, errCorrAmp))
         
             plt.subplot(4,1,4)
             plt.cla()
             plt.plot(tCY, CY)
-#         plot(tCY, CY2, 'k--');
+#         plot(tCY, CY2, 'k--')
             plt.plot([1000/fundCorrGuess, 1000/fundCorrGuess], [0, max(CY)], 'r')
-            plt.plot([1000/fundStackGuess, 1000/fundStackGuess], [0, max(CY)], 'k');
+            plt.plot([1000/fundStackGuess, 1000/fundStackGuess], [0, max(CY)], 'k')
         
-        #%         plot([(pkClosest-1)/fs (pkClosest-1)/fs], [0 max(CY)], 'g');
-        #%         if ~isempty(ipk2)
-        #%             plot([(pk2-1)/fs (pk2-1)/fs], [0 max(CY)], 'b');
-        #%         end
-        #%         for ip=1:length(pks)
-        #%             plot([(locs(ip)-1)/fs (locs(ip)-1)/fs], [0 pks(ip)/4], 'r');
-        #%         end
+            #%         plot([(pkClosest-1)/fs (pkClosest-1)/fs], [0 max(CY)], 'g')
+            #%         if ~isempty(ipk2)
+            #%             plot([(pk2-1)/fs (pk2-1)/fs], [0 max(CY)], 'b')
+            #%         end
+            #%         for ip=1:length(pks)
+            #%             plot([(locs(ip)-1)/fs (locs(ip)-1)/fs], [0 pks(ip)/4], 'r')
+            #%         end
             plt.axis([0, 1000*np.size(CY)/(2*fs), 0, max(CY)])
             plt.xlabel('Time (ms)')
 
@@ -1162,7 +1168,7 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
     meanf1 = np.mean(form1[~np.isnan(form1)])
     meanf2 = np.mean(form2[~np.isnan(form2)])
     meanf3 = np.mean(form3[~np.isnan(form3)])
-    
+
     for it in range(nt):
         if ~np.isnan(form1[it]):
             df11 = np.abs(form1[it]-meanf1)
@@ -1224,10 +1230,82 @@ def fundEstimator(soundIn, fs, t, debugFig = 0, maxFund = 1500, minFund = 300, l
                         else:
                             form2[it] = form3[it]
                     form3[it] = float('nan')
-                                      
-                                           
 
     return (sal, fund, fund2, form1, form2, form3, soundlen)
 
 
 
+def get_mps(t, freq, spec):
+    "Computes the MPS of a spectrogram (idealy a log-spectrogram) or other REAL time-freq representation"
+    mps = fftshift(fft2(spec))
+    amps = np.real(mps * np.conj(mps))
+    nf = mps.shape[0]
+    nt = mps.shape[1]
+    wfreq = fftshift(fftfreq(nf, d=freq[1] - freq[0]))
+    wt = fftshift(fftfreq(nt, d=t[1] - t[0]))
+    return wt, wfreq, mps, amps
+
+def inverse_mps(mps):
+    "Inverts a MPS back to a spectrogram"
+    spec = ifft2(ifftshift(mps))
+    return spec
+
+
+
+def play_signal(s, normalize = False):
+    "quick and easy temporary play"
+    wf = WavFile()
+    wf.sample_rate = 44100 #standard samp rate
+    wf.data = s
+    wf.to_wav("/tmp/README.wav", normalize)
+    play_sound("/tmp/README.wav")
+
+
+
+def inverse_spectrogram(spec, s_len,
+    sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True):
+    """turns the complex spectrogram into a signal
+
+    inverts by repeating the process on a string-of-ones
+    """
+
+    spec_copy = spec.copy()
+    if log:
+        spec_copy = 10**(spec_copy)
+    spec_tranpose = spec.transpose() # spec_tranpose[time][frequency]
+
+    hnwinlen = len(spec) - 1
+    nincrement = int(np.round(float(sample_rate)/spec_sample_rate))
+
+    gauss_t = np.arange(-hnwinlen, hnwinlen+1, 1.0)
+    gauss_std = float(2*hnwinlen) / float(nstd)
+    gauss_window = np.exp(-gauss_t**2 / (2.0*gauss_std**2)) / (gauss_std*np.sqrt(2*np.pi))
+    
+    s = np.zeros(s_len + 2*hnwinlen+1)
+    w = np.zeros(s_len + 2*hnwinlen+1)
+
+    for i in range(len(spec_tranpose)):
+        sample = i * nincrement
+        spec_slice = np.concatenate((spec_tranpose[i][:0:-1].conj(), spec_tranpose[i]))
+        s[sample:sample+2*hnwinlen+1] += gauss_window * ifft(ifftshift(spec_slice))
+        w[sample:sample+2*hnwinlen+1] += gauss_window ** 2
+    s /= w
+    return s[hnwinlen:hnwinlen+s_len]
+
+
+def inverse_real_spectrogram(spec, s_len,
+    sample_rate, spec_sample_rate, freq_spacing, min_freq=0, max_freq=None, nstd=6, log=True, noise_level_db=80, rectify=True, iterations = 10):
+    "inverts a real spectrogram into a signal using the griffith/lim algorithm"
+    spec_magnitude = spec.copy()
+
+    if log:
+        spec_magnitude = 10**spec_magnitude
+    estimated = inverse_spectrogram(spec_magnitude, s_len, sample_rate, spec_sample_rate, freq_spacing, min_freq, max_freq, nstd, log=False)
+    for i in range(iterations):
+        phase_spec = spectrogram(estimated, sample_rate, spec_sample_rate, freq_spacing, min_freq, max_freq, nstd, log=False)[2]
+        error = ((abs(spec_magnitude) - abs(phase_spec))**2).sum() / (abs(spec_magnitude)**2).sum()
+        print "the error after iteration", i+1, " is", error
+        spec_angle = np.angle(phase_spec)
+        estimated_spec = spec_magnitude * np.exp(1j*spec_angle)
+        estimated = inverse_spectrogram(estimated_spec, s_len, sample_rate, spec_sample_rate, freq_spacing, min_freq, max_freq, nstd, log=False)
+    return estimated

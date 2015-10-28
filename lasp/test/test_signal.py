@@ -7,7 +7,8 @@ from matplotlib import cm
 
 import matplotlib.pyplot as plt
 
-from lasp.signal import cross_coherence,bandpass_filter,lowpass_filter,highpass_filter, mt_power_spectrum, power_spectrum,match_power_spectrum
+from lasp.signal import bandpass_filter,lowpass_filter,highpass_filter, mt_power_spectrum, power_spectrum,match_power_spectrum
+from lasp.coherence import cross_coherence
 
 
 class TestSignals(unittest.TestCase):

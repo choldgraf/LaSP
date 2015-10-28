@@ -1,6 +1,7 @@
 import copy
 import operator
 import husl
+from matplotlib import patches
 
 import numpy as np
 
@@ -244,6 +245,24 @@ def draw_husl_circle():
     plt.ylim(-1.25, 1.25)
 
     plt.show()
+
+
+def custom_legend(colors, labels):
+    """ Creates a list of matplotlib Patch objects that can be passed to the legend(...) function to create a custom
+        legend.
+
+    :param colors: A list of colors, one for each entry in the legend. You can also include a linestyle, for example: 'k--'
+    :param labels:  A list of labels, one for each entry in the legend.
+    """
+
+    h = list()
+    for c,l in zip(colors, labels):
+        clr = c
+        ls = 'solid'
+        patch = patches.Patch(color=clr, label=l, linestyle=ls)
+        h.append(patch)
+    return h
+
 
 if __name__ == '__main__':
 

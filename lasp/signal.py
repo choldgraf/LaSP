@@ -4,14 +4,10 @@ import pandas as pd
 from scipy.fftpack import fft,fftfreq,ifft,fftshift
 from scipy.ndimage import convolve1d
 from scipy.signal import filter_design, resample,filtfilt
-
 import matplotlib.pyplot as plt
-
 import nitime.algorithms as ntalg
-import time
 from sklearn.decomposition import PCA,RandomizedPCA
 from sklearn.linear_model import Ridge
-from lasp.coherence import compute_mtcoherence
 
 
 def lowpass_filter(s, sample_rate, cutoff_freq, filter_order=5, rescale=False):
@@ -113,148 +109,6 @@ def resample_signal(s, sample_rate, desired_sample_rate):
     desired_n = int(duration*desired_sample_rate)
     rs,t_rs = resample(s, desired_n, t=t)
     return t_rs,rs
-
-
-def cross_coherence(s1, s2, sample_rate, window_size=5.0, increment=1.0, bandwidth=10.0, noise_floor=False, num_noise_trials=1, debug=False):
-    """
-        Compute the running cross coherence between two time series.
-
-        s1,s2: the signals
-
-        sample_rate: sample rate in Hz for the signal
-
-        window_size: the size in seconds of the sliding window used to compute the coherence
-
-        increment: the amount of time in seconds to slide the window forward per time point
-
-        bandwidth: related to the number of tapers used to compute the cross spectral density
-
-        noise_floor: whether or not to compute a lower bound on the coherence for each time point. The lower bound
-            is defined by the average coherence between two signals that have the same power spectrum as s1 and s2
-            but randomly shuffled phases.
-    """
-
-    assert len(s1) == len(s2)
-
-    #compute lengths in # of samples
-    nwinlen = int(sample_rate*window_size)
-    if nwinlen % 2 == 0:
-        nwinlen += 1
-    hnwinlen = nwinlen / 2
-
-    #compute increment in number of samples
-    slen = len(s1)
-    nincrement = int(sample_rate*increment)
-
-    #compute number of windows
-    nwindows = slen / nincrement
-
-    #get frequency axis values by computing coherence between dummy slice
-    win1 = np.zeros([nwinlen])
-    win2 = np.zeros([nwinlen])
-    cdata = compute_mtcoherence(win1+1.0, win2+1.0, sample_rate, window_size=window_size, bandwidth=bandwidth)
-    freq = cdata.frequency
-
-    #construct the time-frequency representation for time-varying coherence
-    timefreq = np.zeros([len(freq), nwindows])
-    if noise_floor:
-        floor_window_index_min = int(np.ceil(hnwinlen / float(nincrement)))
-        floor_window_index_max = nwindows - floor_window_index_min
-        timefreq_floor = np.zeros([len(freq), nwindows])
-
-    if debug:
-        print '[cross_coherence] length=%0.3f, slen=%d, window_size=%0.3f, increment=%0.3f, bandwidth=%0.1f, nwindows=%d' % \
-              (slen/sample_rate, slen, window_size, increment, bandwidth, nwindows)
-
-    #compute the coherence for each window
-    #print 'nwinlen=%d, hnwinlen=%d, nwindows=%d' % (nwinlen, hnwinlen, nwindows)
-    for k in range(nwindows):
-        if debug:
-            stime = time.time()
-
-        #get the indices of the window within the signals
-        center = k*nincrement
-        si = center - hnwinlen
-        ei = center + hnwinlen + 1
-
-        #adjust indices to deal with edge-padding
-        sii = 0
-        if si < 0:
-            sii = abs(si)
-            si = 0
-        eii = sii + nwinlen
-        if ei > slen:
-            eii = sii + nwinlen - (ei - slen)
-            ei = slen
-
-        #set the content of the windows
-        win1[:] = 0.0
-        win2[:] = 0.0
-        win1[sii:eii] = s1[si:ei]
-        win2[sii:eii] = s2[si:ei]
-        #print '(%0.2f, %0.2f, %0.2f), s1sum=%0.0f, s2sum=%0.0f, k=%d, center=%d, si=%d, ei=%d, sii=%d, eii=%d' % \
-        #      ((center-hnwinlen)/sample_rate, (center+hnwinlen+1)/sample_rate, center/sample_rate, s1sum, s2sum, k, center, si, ei, sii, eii)
-
-        #compute the coherence
-        cdata = compute_mtcoherence(win1, win2, sample_rate, window_size=window_size, bandwidth=bandwidth)
-        timefreq[:, k] = cdata.coherence
-        if debug:
-            total_time = 0.0
-            etime = time.time() - stime
-            total_time += etime
-            print '\twindow %d: time = %0.2fs' % (k, etime)
-
-        #compute the noise floor
-        if noise_floor:
-
-            csum = np.zeros([len(cdata.coherence)])
-
-            for m in range(num_noise_trials):
-                if debug:
-                    stime = time.time()
-
-                #compute coherence between win1 and randomly selected slice of s2
-                win2_shift_index = k
-                while win2_shift_index == k or win2_shift_index < floor_window_index_min or win2_shift_index > floor_window_index_max:
-                    win2_shift_index = np.random.randint(nwindows)
-                w2center = win2_shift_index*nincrement
-                w2si = w2center - hnwinlen
-                w2ei = w2center + hnwinlen + 1
-                win2_shift = s2[w2si:w2ei]
-                #print 'len(s2)=%d, win2_shift_index=%d, w2si=%d, w2ei=%d, len(win1)=%d, len(win2_shift)=%d' % \
-                #      (len(s2), win2_shift_index, w2si, w2ei, len(win1), len(win2_shift))
-                cdata1 = compute_mtcoherence(win1, win2_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
-                csum += cdata1.coherence
-
-                #compute coherence between win2 and randomly selected slice of s1
-                win1_shift_index = k
-                while win1_shift_index == k or win1_shift_index < floor_window_index_min or win1_shift_index > floor_window_index_max:
-                    win1_shift_index = np.random.randint(nwindows)
-                w1center = win1_shift_index*nincrement
-                w1si = w1center - hnwinlen
-                w1ei = w1center + hnwinlen + 1
-                win1_shift = s1[w1si:w1ei]
-                #print 'nwindows=%d, len(s1)=%d, win1_shift_index=%d, w1si=%d, w1ei=%d, len(win2)=%d, len(win1_shift)=%d' % \
-                #      (nwindows, len(s1), win1_shift_index, w1si, w1ei, len(win2), len(win1_shift))
-                cdata2 = compute_mtcoherence(win2, win1_shift, sample_rate, window_size=window_size, bandwidth=bandwidth)
-                csum += cdata2.coherence
-
-                if debug:
-                    etime = time.time() - stime
-                    total_time += etime
-                    print '\t\tnoise trial %d: time = %0.2fs' % (m, etime)
-
-            timefreq_floor[:, k] = csum / (2*num_noise_trials)
-
-        if debug:
-            print '\tTotal time for window %d: %0.2fs' % (k, total_time)
-            print '\tExpected total time for all iterations: %0.2f min' % (total_time*nwindows / 60.0)
-
-    t = np.arange(nwindows)*increment
-    if noise_floor:
-        return t,freq,timefreq,timefreq_floor
-    else:
-        return t,freq,timefreq
 
 
 def power_spectrum(s, sr, log=False, max_val=None, hanning=False):
@@ -513,7 +367,7 @@ def compute_coherence_over_time(signal, trials, Fs, n_perm=5, low=0, high=300):
     return coh_perm, coh_freqs
 
 
-def break_envelope_into_events(s, threshold=0, merge_thresh=None):
+def break_envelope_into_events(s, threshold=0, merge_thresh=None, max_amp_thresh=None):
     """ Segments a one dimensional positive-valued time series into events with start and end times.
 
     :param s: The signal, a numpy array.
@@ -522,15 +376,17 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
             threshold, the event ends.
     :param merge_thresh: Events that are separated by less than minimum_len get merged together. minimum_len
             must be specified in number of time points, not actual time.
+    :param max_amp_thresh: If not None, events whose maximum amplitude is below max_amp_thresh are discarded.
+
     :return: A list of event start and end times, and the maximum amplitude encountered in that event.
     """
 
     assert np.sum(s < 0) == 0, "segment_envelope: Can't segment a signal that has negative values!"
 
-    #array to keep track of start and end times of each event
+    # array to keep track of start and end times of each event
     events = list()
 
-    #scan through the signal, find events
+    # scan through the signal, find events
     in_event = False
     max_amp = -np.inf
     start_index = -1
@@ -538,12 +394,13 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
 
         if in_event:
             if x > max_amp:
-                #we found a new peak
+                # we found a new peak
                 max_amp = x
             if x <= threshold:
-                #the event has ended
+                # the event has ended
                 in_event = False
                 events.append( (start_index, t, max_amp))
+                start_index = -1
                 #print 'Identified event (%d, %d, %0.6f)' % (start_index, t, max_amp)
         else:
             if x > threshold:
@@ -551,8 +408,21 @@ def break_envelope_into_events(s, threshold=0, merge_thresh=None):
                 start_index = t
                 max_amp = threshold
 
+    # get the last event if there is one
+    if start_index != -1:
+        events.append( (start_index, len(s)-1, max_amp))
+
     # print '# of events (pre-merge): %d' % len(events)
     events = np.array(events)
+
+    # discard any events whose maximum amplitude is less than max_amp_thresh
+    if max_amp_thresh is not None:
+        events2 = list()
+        for si,ei,max_amp in events:
+            if max_amp >= max_amp_thresh:
+                events2.append( (si, ei, max_amp))
+        events = np.array(events2)
+        del events2
 
     if merge_thresh is None:
         return events
@@ -634,7 +504,7 @@ def phase_locking_value(z1, z2):
     return plv
 
 
-def correlation_function(s1, s2, lags):
+def correlation_function(s1, s2, lags, mean_subtract=True, normalize=True):
     """ Computes the cross-correlation function between signals s1 and s2. The cross correlation function is defined as:
 
             cf(k) = sum_over_t( (s1(t) - s1.mean()) * (s2(t+k) - s2.mean()) ) / s1.std()*s2.std()
@@ -642,6 +512,8 @@ def correlation_function(s1, s2, lags):
     :param s1: The first signal.
     :param s2: The second signal.
     :param lags: An array of integers indicating the lags. The lags are in units of sample period.
+    :param mean_subtract: If True, subtract the mean of s1 from s1, and the mean of s2 from s2, which is the standard thing to do.
+    :param normalize: If True, then divide the correlation function by the product of standard deviations of s1 and s2.
     :return: cf The cross correlation function evaluated at the lags.
     """
     
@@ -649,8 +521,12 @@ def correlation_function(s1, s2, lags):
     assert np.sum(np.isnan(s1)) == 0, "There are NaNs in s1"
     assert np.sum(np.isnan(s2)) == 0, "There are NaNs in s2"
 
-    s1_mean = s1.mean()
-    s2_mean = s2.mean()
+    s1_mean = 0
+    s2_mean = 0
+    if mean_subtract:
+        s1_mean = s1.mean()
+        s2_mean = s2.mean()
+
     s1_std = s1.std(ddof=1)
     s2_std = s2.std(ddof=1)
     s1_centered = s1 - s1_mean
@@ -682,7 +558,8 @@ def correlation_function(s1, s2, lags):
         elif lag < 0:
             cf[k] = np.dot(s1_centered[np.abs(lag):], s2_centered[:lag]) / (N+lag)
 
-    cf /= s1_std * s2_std
+    if normalize:
+        cf /= s1_std * s2_std
 
     return cf
 
@@ -934,3 +811,5 @@ def whiten(s, order):
     spred = reg.predict(X)
 
     return sm - np.r_[0, spred], reg.coef_
+
+
