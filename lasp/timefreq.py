@@ -288,6 +288,23 @@ def generate_sliding_windows(N, sample_rate, increment, window_length):
 
 def gaussian_stft(s, sample_rate, window_length, increment, min_freq=0,
                   max_freq=None, nstd=6):
+    """
+        Compute a gaussian-windowed short-time fourier transform representation of the signal s.
+
+        s: the raw waveform.
+        sample_rate: the sample rate of the waveform
+        window_length: The length in seconds of the window to use for each segment.
+        increment: the spacing in seconds between points where the spectrum is computed, i.e. inverse of the spectrogram sample rate
+        min_freq: the minimum frequency to analyze (Hz)
+        max_freq: the maximum frequency to analyze (Hz) (if None then the nyquist frequency will be used)
+
+        Returns t,freq,spec,rms:
+
+        t: the time axis of the spectrogram
+        freq: the frequency axis of the spectrogram
+        tf: the time-frequency representation
+    """
+
     spectrum_estimator = GaussianSpectrumEstimator(nstd=nstd)
     t, freq, tf = timefreq(s, sample_rate, window_length, increment,
                            spectrum_estimator=spectrum_estimator,
@@ -419,7 +436,7 @@ class PhaseReassignment(object):
         return ps_r
 
 
-def log_spectrogram(spec):
+def log_spectrogram(spec, offset=100):
     """
         Compute the log spectrogram.
     """
@@ -428,7 +445,7 @@ def log_spectrogram(spec):
     nz = spec > 0.0
     lspec[nz] = np.log10(spec[nz])
     lspec[nz] *= 10
-    lspec[nz] += 100
+    lspec[nz] += offset
     lspec[lspec < 0] = 0
 
     return lspec
