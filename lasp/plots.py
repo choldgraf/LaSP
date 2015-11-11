@@ -2,6 +2,7 @@ import copy
 import operator
 import husl
 from matplotlib import patches
+from matplotlib.colors import LinearSegmentedColormap
 
 import numpy as np
 
@@ -245,6 +246,28 @@ def draw_husl_circle():
     plt.ylim(-1.25, 1.25)
 
     plt.show()
+
+
+def register_husl_colormap(nsegs=90):
+
+    cdict = {'red':list(), 'green':list(), 'blue':list()}
+
+    r0,g0,b0 = husl.husl_to_rgb(0, 99.0, 50)
+    cdict['red'].append((0., r0, r0))
+    cdict['blue'].append((0., b0, b0))
+    cdict['green'].append((0., g0, g0))
+
+    inc = 360. / nsegs
+    for k in range(nsegs):
+        d = (k+1)*inc
+        x = (k+1) / float(nsegs)
+        r,g,b = husl.husl_to_rgb(d, 99.0, 50.0)
+        cdict['red'].append((x, r, r))
+        cdict['green'].append((x, g, g))
+        cdict['blue'].append((x, b, b))
+
+    cm = LinearSegmentedColormap('HUSL', cdict)
+    plt.register_cmap(cmap=cm)
 
 
 def custom_legend(colors, labels):
